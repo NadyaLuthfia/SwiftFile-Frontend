@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/* Mengunci setelan dasar halaman agar bersih, full, dan anti-scroll-samping */
+html, 
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #F0F4F8;
+  overflow: hidden; /* Mematikan scroll bar bawaan browser yang merusak pemandangan */
+}
+
+/* MENJINAKKAN #ROOT: Kita paksa melebar 100% penuh tanpa batasan pixel lagi! */
+#root {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left; /* Mengembalikan teks ke kiri agar dashboard kembali normal & gagah */
+  display: flex;
+  flex-direction: row;
+  box-sizing: border-box;
+  background-color: #F0F4F8;
+}
+
+/* Setelan tipografi standar global */
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
