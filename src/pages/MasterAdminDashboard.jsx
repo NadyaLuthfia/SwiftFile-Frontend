@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import Sidebar from './Sidebar';
 
-function Dashboard() {
+function DashboardMasterAdmin() {
   const [currentDate, setCurrentDate] = useState('📅 Menghitung tanggal...');
-  const [copies, setCopies] = useState(2);
+  const [copies, setCopies] = useState(1);
   const [selectedPage, setSelectedPage] = useState('Semua Halaman (All)');
 
   useEffect(() => {
@@ -11,113 +12,96 @@ function Dashboard() {
     setCurrentDate(`🔹 ${tanggalSekarang}`);
   }, []);
 
-  const handlePrint = () => {
-    alert(`Dokumen siap dicetak!\nJumlah: ${copies} Rangkap\nHalaman: ${selectedPage}`);
-  };
-
-  const handleFileChange = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      alert(`File "${file.name}" terpilih!\nSistem siap mengunggah ke folder template.`);
-    }
-  };
+  const handleUpload = () => alert("Membuka menu upload file template...");
+  const handlePrint = () => alert(`Dokumen diprint sebanyak ${copies} rangkap.`);
 
   return (
     <div 
-      className="bg-[#F4F7FA] text-slate-700 flex h-screen w-full overflow-hidden antialiased p-4 selection:bg-blue-200"
-      style={{ fontFamily: "'Poppins', 'Inter', sans-serif" }}
+      className="bg-[#F8FAFC] text-slate-700 flex h-screen w-full overflow-hidden antialiased selection:bg-blue-200"
+      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
     >
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+      {/* Font & Icons */}
+      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+      
+      <Sidebar />
 
-      {/* ================= SIDEBAR KIRI ================= */}
-      <aside className="w-64 bg-white/90 backdrop-blur-md rounded-[24px] flex flex-col justify-between p-6 shrink-0 h-full shadow-md shadow-blue-100/40 border border-blue-50">
-        <div className="flex flex-col h-full justify-between">
-          <div>
-            <div className="flex items-center space-x-3 px-2 py-3 mb-6">
-              <div className="bg-gradient-to-br from-blue-400 to-blue-500 text-white h-10 w-10 rounded-xl flex items-center justify-center font-black text-xl shadow-md shadow-blue-400/20">S</div>
-              <span className="text-xl font-black tracking-tight text-slate-800">Swift<span className="text-blue-500">File</span></span>
-            </div>
-            
-            <nav className="space-y-1.5">
-              <a href="#" className="flex items-center space-x-3 bg-blue-50 text-blue-600 px-4 py-3 rounded-xl font-bold transition-all border-l-4 border-blue-500 shadow-sm">
-                <span className="text-base">🏠</span> <span className="text-xs tracking-wide">Dashboard</span>
-              </a>
-              <a href="#" className="flex items-center space-x-3 text-slate-900 hover:bg-blue-50/50 hover:text-blue-600 px-4 py-3 rounded-xl font-bold transition-all">
-                <span className="text-base">📁</span> <span className="text-xs tracking-wide">File Template</span>
-              </a>
-
-              <div className="pt-3">
-                <span className="px-4 text-[10px] font-black text-blue-500 uppercase tracking-widest block mb-2">Draft Dokumen</span>
-                <div className="space-y-1 pl-2">
-                  <a href="#" className="flex items-center space-x-2 text-slate-900 hover:text-blue-600 px-4 py-2 rounded-lg text-xs font-bold transition-all"><span className="text-blue-500">•</span> <span>BA Kerusakan</span></a>
-                  <a href="#" className="flex items-center space-x-2 text-slate-900 hover:text-blue-600 px-4 py-2 rounded-lg text-xs font-bold transition-all"><span className="text-blue-500">•</span> <span>BA Penyerahan</span></a>
-                  <a href="#" className="flex items-center space-x-2 text-slate-900 hover:text-blue-600 px-4 py-2 rounded-lg text-xs font-bold transition-all"><span className="text-blue-500">•</span> <span>Surat Tugas</span></a>
-                </div>
-              </div>
-
-              <div className="pt-3">
-                <a href="#" className="flex items-center justify-between text-slate-900 hover:bg-blue-50/50 hover:text-blue-600 px-4 py-3 rounded-xl font-bold transition-all">
-                  <div className="flex items-center space-x-3"><span className="text-base">🖨️</span> <span className="text-xs tracking-wide">Siap Cetak</span></div>
-                  <span className="bg-amber-400 text-amber-900 text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-sm">1</span>
-                </a>
-              </div>
-
-              <a href="#" className="flex items-center space-x-3 text-slate-900 hover:bg-blue-50/50 hover:text-blue-600 px-4 py-3 rounded-xl font-bold transition-all">
-                <span className="text-base">📚</span> <span className="text-xs tracking-wide">Arsip & History</span>
-              </a>
-
-              {/* FITUR BARU: Riwayat Monitoring */}
-              <a href="#" className="flex items-center space-x-3 text-slate-900 hover:bg-blue-50/50 hover:text-blue-600 px-4 py-3 rounded-xl font-bold transition-all">
-                <span className="text-base">📊</span> <span className="text-xs tracking-wide">Riwayat Monitoring</span>
-              </a>
-            </nav>
-          </div>
-
-          <div className="bg-blue-50/60 p-3.5 rounded-xl flex items-center space-x-3 border border-blue-100/50">
-            <div className="h-9 w-9 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold shadow-sm">SU</div>
-            <div className="truncate">
-              <h4 className="text-xs font-black text-slate-900 truncate">Siti Karyawan</h4>
-              <p className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Divisi Administrasi</p>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* ================= AREA KONTEN UTAMA ================= */}
-      <main className="flex-1 flex flex-col px-8 py-2 overflow-y-auto h-full min-w-0">
-        <div className="w-full space-y-6">
-          <header className="flex justify-between items-center shrink-0 pt-2">
+      <main className="flex-1 flex flex-col px-10 py-6 overflow-y-auto h-full min-w-0">
+        <div className="w-full max-w-7xl mx-auto space-y-8">
+          
+          {/* Header */}
+          <header className="flex justify-between items-center">
             <div>
-              <h1 className="text-2xl font-black text-slate-800 tracking-tight">SwiftFile Hub <span className="text-blue-500">Sucofindo</span></h1>
-              <p className="text-xs text-slate-400 font-medium">Sistem integrasi arsip dan cetak dokumen digital operasional terpadu.</p>
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                Dashboard <span className="text-blue-600">Master Admin</span>
+              </h1>
+              <p className="text-sm text-slate-500 font-medium mt-1">Monitoring pusat, manajemen template, dan validasi dokumen.</p>
             </div>
-
-            <div className="flex items-center space-x-3">
-              {/* FITUR BARU: Tombol Upload Estetik */}
-              <label className="cursor-pointer group flex items-center space-x-2 bg-white hover:bg-blue-50 border border-blue-100 px-4 py-2 rounded-full shadow-sm transition-all duration-300">
-                <span className="text-blue-500 group-hover:scale-110 transition-transform">📂</span>
-                <span className="text-[10px] font-bold text-slate-600 group-hover:text-blue-600 uppercase tracking-wider">Upload Template</span>
-                <input type="file" className="hidden" onChange={handleFileChange} accept=".docx, .pdf" />
-              </label>
-
-              <div className="bg-white px-5 py-2 rounded-full shadow-sm text-xs text-blue-600 font-bold border border-blue-50 shrink-0">
-                {currentDate}
-              </div>
+            <div className="flex items-center gap-3">
+              <button onClick={handleUpload} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-200 flex items-center gap-2">
+                <span>+</span> Upload Template
+              </button>
+              <div className="bg-white px-5 py-2.5 rounded-xl shadow-sm text-xs text-blue-600 font-bold border border-blue-100/60">{currentDate}</div>
             </div>
           </header>
 
-          {/* Section Statistik (Sama seperti sebelumnya) */}
-          {/* ... */}
-          
-          {/* Section Konfirmasi Cetak */}
-          {/* ... */}
-          
+          {/* Statistik */}
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { label: 'Master Template', val: '3', unit: 'File' },
+              { label: 'Total di Draft', val: '2', unit: 'Berkas' },
+              { label: 'Antrean Cetak', val: '1', unit: 'Verifikasi' },
+              { label: 'Total Arsip Sah', val: '142', unit: 'Dokumen' }
+            ].map((item, index) => (
+              <div key={index} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 transition-all hover:shadow-md">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.label}</p>
+                <p className="text-3xl font-extrabold text-slate-900 mt-2">
+                  {item.val} <span className="text-sm font-medium text-slate-400">{item.unit}</span>
+                </p>
+              </div>
+            ))}
+          </section>
+
+          {/* Konfirmasi Dokumen */}
+          <section className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <div className="border-b border-slate-100 pb-6 mb-6">
+              <h3 className="text-lg font-bold text-slate-900">Konfirmasi Dokumen Siap Cetak</h3>
+              <p className="text-xs text-slate-400 mt-1">Validasi berkas rampung. Atur parameter halaman dan jumlah rangkap di sini.</p>
+            </div>
+            
+            <div className="bg-slate-50/50 p-5 rounded-2xl flex flex-wrap items-center gap-6 border border-slate-100">
+              <div className="flex items-center space-x-4 flex-1 min-w-[200px]">
+                <div className="h-12 w-12 bg-white rounded-xl flex items-center justify-center text-2xl border border-slate-100 shadow-sm">📄</div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">001_BTG-VI_BA_Penyerahan.pdf</h4>
+                  <p className="text-[11px] text-blue-500 font-semibold uppercase tracking-wide mt-0.5">Terverifikasi</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button className="bg-white border border-slate-200 text-slate-600 px-4 py-3 rounded-xl text-xs font-bold hover:bg-slate-50 shadow-sm flex items-center gap-2">👁️ Lihat</button>
+                
+                <select value={selectedPage} onChange={(e) => setSelectedPage(e.target.value)} className="p-3 bg-white border border-slate-200 rounded-xl font-semibold text-slate-700 text-xs shadow-sm outline-none">
+                  <option>Semua Halaman (All)</option>
+                </select>
+
+                <input 
+                  type="number" 
+                  value={copies} 
+                  min="1" 
+                  onChange={(e) => setCopies(e.target.value)} 
+                  className="w-16 p-3 bg-white border border-slate-200 rounded-xl font-bold text-center text-xs shadow-sm outline-none" 
+                />
+                
+                <button onClick={handlePrint} className="bg-slate-900 text-white px-6 py-3 rounded-xl text-xs font-bold hover:bg-slate-800 shadow-lg shadow-slate-200">
+                  Print & Arsipkan
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
       </main>
     </div>
   );
 }
 
-export default Dashboard;
+export default DashboardMasterAdmin;
