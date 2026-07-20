@@ -1,14 +1,63 @@
 import React, { useState } from 'react';
 
 function Login() {
-  // Membuat state untuk menyimpan apa yang diketik karyawan
+  // State untuk menyimpan inputan user
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  
+  // State untuk status loading pas tombol diklik
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Nanti di sini tempat menyambungkan ke database asli
-    alert(`Selamat Datang kembali!\nUsername: ${username}`);
+    setLoading(true); // Aktifkan status loading
+
+    try {
+      // Nembak ke API Login Laravel
+      const response = await fetch('http://127.0.0.1:8000/api/login/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          username: username,
+          password: password
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Jika login sukses, simpan token dan informasi penting ke localStorage
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('role', data.user.role);
+        localStorage.setItem('user_name', data.user.nama);
+
+        const role = data.user.role;
+        
+        // 🚀 FIX PERUBAHAN DI SINI: Jalur dialihkan sesuai halaman dashboard masing-masing role
+        if (role === 'master_admin') {
+          window.location.href = '/master-dashboard';
+        } 
+        else if (role === 'admin') {
+          window.location.href = '/admin-dashboard'; 
+        } 
+        else {
+          // User biasa sekarang otomatis meluncur ke halaman barunya!
+          window.location.href = '/dashboard'; 
+        }
+
+      } else {
+        // Jika backend menolak (misal password salah), munculkan pesan errornya
+        alert(data.message || 'Login gagal, periksa kembali akun Anda.');
+      }
+    } catch (error) {
+      console.error('Error saat login:', error);
+      alert('Gagal terhubung ke server backend. Pastikan server Laravel sudah kamu nyalain ya!');
+    } finally {
+      setLoading(false); // Matikan status loading setelah proses selesai
+    }
   };
 
   return (
@@ -39,7 +88,7 @@ function Login() {
           {/* Input Username */}
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700 block pl-2">
-              Username atau Email Karyawan
+              User
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400">
@@ -50,10 +99,11 @@ function Login() {
               <input 
                 type="text" 
                 required
+                disabled={loading}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Masukkan ID kamu" 
-                className="w-full pl-12 p-4 bg-[#F8FAFC] border-2 border-[#E2E8F0] rounded-full focus:outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100 transition duration-300 placeholder:text-slate-400 text-slate-700"
+                placeholder="Masukan Nama User" 
+                className="w-full pl-12 p-4 bg-[#F8FAFC] border-2 border-[#E2E8F0] rounded-full focus:outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100 transition duration-300 placeholder:text-slate-400 text-slate-700 disabled:opacity-50"
               />
             </div>
           </div>
@@ -62,7 +112,6 @@ function Login() {
           <div className="space-y-2">
             <div className="flex justify-between items-center pl-2">
               <label className="text-sm font-semibold text-slate-700">Password</label>
-              <a href="#" className="text-xs text-blue-500 hover:text-blue-700 font-medium">Lupa?</a>
             </div>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400">
@@ -73,10 +122,11 @@ function Login() {
               <input 
                 type="password" 
                 required
+                disabled={loading}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••" 
-                className="w-full pl-12 p-4 bg-[#F8FAFC] border-2 border-[#E2E8F0] rounded-full focus:outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100 transition duration-300 text-slate-700"
+                className="w-full pl-12 p-4 bg-[#F8FAFC] border-2 border-[#E2E8F0] rounded-full focus:outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100 transition duration-300 text-slate-700 disabled:opacity-50"
               />
             </div>
           </div>
@@ -84,12 +134,15 @@ function Login() {
           {/* Tombol Submit */}
           <button 
             type="submit" 
-            className="group w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-4 rounded-full font-bold shadow-lg shadow-blue-100 hover:shadow-xl hover:shadow-blue-200 transform hover:-translate-y-1 transition duration-300 active:scale-95 flex items-center justify-center space-x-2 cursor-pointer"
+            disabled={loading}
+            className="group w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-4 rounded-full font-bold shadow-lg shadow-blue-100 hover:shadow-xl hover:shadow-blue-200 transform hover:-translate-y-1 transition duration-300 active:scale-95 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-60 disabled:pointer-events-none"
           >
-            <span>Ayo Mulai Cetak</span>
-            <svg className="h-5 w-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
+            <span>{loading ? 'Menghubungkan...' : 'Ayo Mulai Cetak'}</span>
+            {!loading && (
+              <svg className="h-5 w-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            )}
           </button>
         </form>
 
