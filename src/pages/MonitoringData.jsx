@@ -85,13 +85,128 @@ function MonitoringData() {
     return matchSearch && matchRole && sudahMasukArsip;
   });
 
-  // Deteksi Surat Tugas
+  // Deteksi Surat Tugas untuk Modal
   const isSuratTugas = selectedFileForModal && (
     selectedFileForModal.template_id === 3 || 
     selectedFileForModal.template_id === '3' || 
     selectedFileForModal.foto_ttd === 'tanpa_ttd' ||
     selectedFileForModal.nama_dokumen?.toLowerCase().includes('tugas')
   );
+
+  // HELPER PINTAR: Mencari nilai field secara mendalam dengan prioritas kata kunci persis
+  const findValueByKeywords = (obj, exactKeywords, partialKeywords = []) => {
+    if (!obj || typeof obj !== 'object') return null;
+
+    const ignoreKeys = ['id', 'user_id', 'template_id', 'created_at', 'updated_at', 'file_path', 'foto_ttd', 'nama_dokumen', 'nama_pembuat', 'role', 'status', 'nama_penerima', 'nama_penyerah', 'pihak_satu', 'pihak_dua'];
+
+    // 1. Cek Exact Match / Match Presisi Dulu
+    for (const key of Object.keys(obj)) {
+      const lowerKey = key.toLowerCase();
+      if (ignoreKeys.includes(lowerKey)) continue;
+
+      for (const kw of exactKeywords) {
+        if (lowerKey === kw.toLowerCase()) {
+          const val = obj[key];
+          if (val && typeof val !== 'object' && String(val).trim() !== '') {
+            return String(val);
+          }
+        }
+      }
+    }
+
+    // 2. Cek Partial Match jika tidak ada exact match
+    if (partialKeywords.length > 0) {
+      for (const key of Object.keys(obj)) {
+        const lowerKey = key.toLowerCase();
+        if (ignoreKeys.includes(lowerKey)) continue;
+
+        for (const kw of partialKeywords) {
+          if (lowerKey.includes(kw.toLowerCase())) {
+            const val = obj[key];
+            if (val && typeof val !== 'object' && String(val).trim() !== '') {
+              return String(val);
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Cari di sub-objek/relasi
+    for (const key of Object.keys(obj)) {
+      let val = obj[key];
+      if (typeof val === 'string') {
+        try { val = JSON.parse(val); } catch (e) {}
+      }
+      if (val && typeof val === 'object' && val !== null) {
+        const found = findValueByKeywords(val, exactKeywords, partialKeywords);
+        if (found) return found;
+      }
+    }
+
+    return null;
+  };
+
+  // FUNGSI RENDER DETAIL DINAMIS
+  const renderDetailDynamic = (file) => {
+    const namaDoc = file.nama_dokumen?.toLowerCase() || '';
+    const templateId = String(file.template_id || file.template?.id || '');
+
+    // 1. SURAT TUGAS
+    if (templateId === '3' || namaDoc.includes('tugas')) {
+      const pekerja = findValueByKeywords(file, ['nama_pekerja', 'pekerja', 'nama_karyawan', 'petugas'], ['pekerja', 'karyawan', 'petugas']);
+      const lokasi = findValueByKeywords(file, ['lokasi', 'lokasi_tugas', 'tempat', 'tujuan'], ['lokasi', 'tempat', 'tujuan', 'alamat']);
+
+      if (pekerja || lokasi) {
+        return (
+          <span className="text-[10px] font-medium text-slate-500 bg-slate-100/90 border border-slate-200/80 px-2 py-0.5 rounded-md flex items-center gap-1.5 shrink-0 truncate max-w-[320px]">
+            {pekerja && <span>👤 <strong className="text-slate-700 font-semibold">{pekerja}</strong></span>}
+            {pekerja && lokasi && <span className="text-slate-300">•</span>}
+            {lokasi && <span>📍 <strong className="text-slate-700 font-semibold">{lokasi}</strong></span>}
+          </span>
+        );
+      }
+    }
+
+    // 2. BA KERUSAKAN
+    if (templateId === '2' || namaDoc.includes('kerusakan')) {
+      const alat = findValueByKeywords(
+        file, 
+        ['nama_alat', 'nama_barang', 'alat', 'peralatan', 'mesin'], 
+        ['alat', 'barang', 'mesin']
+      );
+      if (alat) {
+        return (
+          <span className="text-[10px] font-medium text-slate-500 bg-slate-100/90 border border-slate-200/80 px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0 truncate max-w-[260px]">
+            🛠️ Alat: <strong className="text-slate-700 font-semibold">{alat}</strong>
+          </span>
+        );
+      }
+    }
+
+    // 3. BA PENYERAHAN
+    if (templateId === '1' || namaDoc.includes('penyerahan')) {
+      // Dibuat lebih spesifik memprioritaskan nama barang / item saja, mengabaikan nama orang
+      const item = findValueByKeywords(
+        file, 
+        ['nama_barang', 'nama_item', 'item', 'barang', 'objek_penyerahan', 'jenis_barang'], 
+        ['item', 'barang', 'objek']
+      );
+      if (item) {
+        return (
+          <span className="text-[10px] font-medium text-slate-500 bg-slate-100/90 border border-slate-200/80 px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0 truncate max-w-[260px]">
+            📦 Item: <strong className="text-slate-700 font-semibold">{item}</strong>
+          </span>
+        );
+      }
+    }
+
+    // Fallback ID jika tidak ada barang/detail ditemukan
+    return (
+      <span className="text-[10px] text-slate-400 font-semibold">
+        ID: #{file.id}
+      </span>
+    );
+  };
 
   return (
     <div 
@@ -175,16 +290,17 @@ function MonitoringData() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p 
-                            className="text-slate-800 font-bold hover:text-sky-600 transition-colors cursor-pointer text-xs truncate max-w-[280px]" 
+                            className="text-slate-800 font-bold hover:text-sky-600 transition-colors cursor-pointer text-xs truncate max-w-[320px]" 
                             onClick={() => setSelectedFileForModal(file)}
                             title={file.nama_dokumen}
                           >
                             {file.nama_dokumen}
                           </p>
+                          
+                          {/* RINCIAN DINAMIS MENGGANTIKAN ID */}
                           <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] text-slate-400 font-semibold">
-                              ID: #{file.id}
-                            </span>
+                            {renderDetailDynamic(file)}
+
                             <span className="text-[10px] font-bold text-sky-600 bg-sky-50/90 border border-sky-100 px-2 py-0.5 rounded-lg flex items-center gap-1 shrink-0">
                               👤 {file.nama_pembuat}
                             </span>
