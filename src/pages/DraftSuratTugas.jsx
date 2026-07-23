@@ -59,7 +59,7 @@ function DraftSuratTugas() {
     }
   }, [templateIdParam, draftIdParam]);
 
-  // ✨ AUTOMATION LOGIC: Tetap aktif menghitung total hari di latar belakang
+  // AUTOMATION LOGIC: Tetap aktif menghitung total hari di latar belakang
   useEffect(() => {
     const tglBerangkat = formData.tanggal_berangkat;
     const tglTiba = formData.tanggal_tiba;
@@ -339,6 +339,7 @@ function DraftSuratTugas() {
     return data;
   };
 
+  // ⚡ SIMPAN DRAFT (Tanpa Pop-up Alert, Langsung Pindah & Menandai File)
   const handleSaveDraft = (e) => {
     e.preventDefault();
     setLoadingDraft(true);
@@ -364,18 +365,28 @@ function DraftSuratTugas() {
         'Accept': 'application/json'
       }
     })
-    .then(() => {
-      alert("📁 Draft dokumen berhasil diamankan!");
+    .then((res) => {
       setLoadingDraft(false);
-      navigate('/draft-dokumen'); 
+      
+      // Ambil ID draft yang baru disimpan/diperbarui
+      const savedId = res?.data?.data?.id || res?.data?.id || draftIdParam;
+      
+      // 🚀 Langsung pindah ke halaman /draft-dokumen tanpa alert
+      if (savedId) {
+        navigate(`/draft-dokumen?highlight=${savedId}`, {
+          state: { highlightId: savedId, autoFocus: true }
+        });
+      } else {
+        navigate('/draft-dokumen');
+      }
     })
     .catch(err => {
       console.error(err);
-      alert("❌ Gagal memproses simpan draf.");
       setLoadingDraft(false);
     });
   };
 
+  // ⚡ KIRIM KE ANTREAN / SIAP CETAK (Tanpa Pop-up Alert, Langsung Pindah & Menandai File)
   const handleSelesai = (e) => {
     e.preventDefault();
     setLoadingSelesai(true);
@@ -384,6 +395,8 @@ function DraftSuratTugas() {
     const payloadMultipart = generateMultipartData();
     payloadMultipart.append('items', JSON.stringify(dokumen_item));
 
+    let createdDocId = null;
+
     axios.post('http://localhost:8000/api/siap-cetak', payloadMultipart, {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -391,7 +404,9 @@ function DraftSuratTugas() {
         'Accept': 'application/json'
       }
     })
-    .then(() => {
+    .then((res) => {
+      createdDocId = res?.data?.data?.id || res?.data?.id;
+
       if (draftIdParam) {
         return axios.delete(`http://localhost:8000/api/drafts/${draftIdParam}`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -399,13 +414,19 @@ function DraftSuratTugas() {
       }
     })
     .then(() => {
-      alert("📥 Sukses masuk antrean cetak & dokumen berhasil disimpan!");
       setLoadingSelesai(false);
-      navigate('/siap-cetak'); 
+      
+      // 🚀 Langsung pindah ke halaman /siap-cetak tanpa alert
+      if (createdDocId) {
+        navigate(`/siap-cetak?highlight=${createdDocId}`, {
+          state: { highlightId: createdDocId, autoFocus: true }
+        });
+      } else {
+        navigate('/siap-cetak');
+      }
     })
     .catch(err => {
       console.error(err);
-      alert("❌ Gagal memproses pengiriman dokumen.");
       setLoadingSelesai(false);
     });
   };
@@ -414,9 +435,17 @@ function DraftSuratTugas() {
     return text.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
+  // =========================================================================
+  // RENDER LIVE PREVIEW (Tampilan Sky Blue Bersih & Natural)
+  // =========================================================================
   const renderLivePreview = () => {
     if (!textContent) {
-      return <p className="text-slate-400 italic text-center py-10">Memuat teks preview...</p>;
+      return (
+        <div className="flex flex-col items-center justify-center py-20 text-sky-400">
+          <div className="text-3xl animate-bounce mb-2">📄</div>
+          <p className="italic text-xs font-medium">Sedang menyiapkan preview kertas...</p>
+        </div>
+      );
     }
 
     let processedHTML = textContent;
@@ -427,8 +456,8 @@ function DraftSuratTugas() {
       if (variable.startsWith('foto_')) {
         const filePreview = filePreviews[variable];
         const replacementPhoto = filePreview 
-          ? `<img src="${filePreview}" class="max-w-[120px] max-h-[60px] object-contain rounded-lg border border-slate-200 p-1 bg-white my-1 inline-block" />`
-          : `<span class="bg-blue-50 text-blue-500 border border-blue-100 px-1.5 py-0.5 rounded text-[10px] font-mono">[Foto ${formatLabel(variable)}]</span>`;
+          ? `<img src="${filePreview}" class="max-w-[130px] max-h-[70px] object-contain rounded border border-sky-200 p-0.5 bg-white inline-block shadow-xs" />`
+          : `<span class="text-sky-600 font-mono text-[10px] italic">[Foto ${formatLabel(variable)}]</span>`;
         processedHTML = processedHTML.replaceAll(`\${${variable}}`, replacementPhoto);
         return;
       }
@@ -441,8 +470,8 @@ function DraftSuratTugas() {
       }
 
       const replacementText = userValue 
-        ? `<span class="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded font-semibold border border-amber-200 mx-0.5">${userValue}</span>` 
-        : `<span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono text-[10px] border border-slate-200 mx-0.5">${variable}</span>`;
+        ? `<span class="text-sky-600 font-bold underline underline-offset-2 decoration-sky-300">${userValue}</span>` 
+        : `<span class="text-slate-400 italic text-[10px] font-mono">[${variable}]</span>`;
       
       processedHTML = processedHTML.replaceAll(`\${${variable}}`, replacementText);
     });
@@ -451,7 +480,7 @@ function DraftSuratTugas() {
       if (fields.includes(v) || textContent.includes(`\${${v}}`)) {
         const fallback = v === 'no' ? '001' : v === 'tahun' ? new Date().getFullYear() : new Date().getDate();
         const userValue = formData[v] || fallback;
-        const replacement = `<span class="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded font-semibold border border-amber-200 mx-0.5">${userValue}</span>`;
+        const replacement = `<span class="text-sky-600 font-bold underline underline-offset-2 decoration-sky-300">${userValue}</span>`;
         processedHTML = processedHTML.replaceAll(`\${${v}}`, replacement);
       }
     });
@@ -463,63 +492,69 @@ function DraftSuratTugas() {
         'Juli': 'VII', 'Agustus': 'VIII', 'September': 'IX', 'Oktober': 'X', 'November': 'XI', 'Desember': 'XII'
       };
       const nilaiRomawi = romawiMap[userValueBulan] || 'VII';
-      processedHTML = processedHTML.replace(/\/BTG-\s*\${bulan}\s*\//g, `/BTG-<span class="bg-emerald-100 text-emerald-950 px-1.5 py-0.5 rounded font-bold border border-emerald-200 mx-0.5">${nilaiRomawi}</span>/`);
+      processedHTML = processedHTML.replace(/\/BTG-\s*\${bulan}\s*\//g, `/BTG-<span class="text-sky-600 font-bold underline underline-offset-2 decoration-sky-300">${nilaiRomawi}</span>/`);
       
-      const replacementAlfabet = `<span class="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded font-semibold border border-amber-200 mx-0.5">${userValueBulan}</span>`;
+      const replacementAlfabet = `<span class="text-sky-600 font-bold underline underline-offset-2 decoration-sky-300">${userValueBulan}</span>`;
       processedHTML = processedHTML.replaceAll('${bulan}', replacementAlfabet);
     }
 
     return (
-      <div dangerouslySetInnerHTML={{ __html: processedHTML }} className="text-slate-700 leading-relaxed space-y-3 whitespace-pre-line break-words text-xs tracking-normal [&_table]:!w-auto [&_table]:!max-w-full [&_td]:!p-2 [&_table]:border-collapse [&_table]:border [&_table]:border-slate-300 [&_td]:border [&_td]:border-slate-300 [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50" />
+      <div 
+        dangerouslySetInnerHTML={{ __html: processedHTML }} 
+        className="text-slate-800 leading-relaxed space-y-3 whitespace-pre-line break-words text-[11px] tracking-normal font-sans [&_table]:!w-auto [&_table]:!max-w-full [&_td]:!p-2 [&_table]:border-collapse [&_table]:border [&_table]:border-slate-300 [&_td]:border [&_td]:border-slate-300 [&_th]:border [&_th]:border-slate-300 [&_th]:bg-sky-50/50" 
+      />
     );
   };
 
   return (
-    <div className="bg-[#F8FAFC] text-slate-700 flex h-screen w-full overflow-hidden antialiased" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <div className="bg-[#F4F8FC] text-slate-700 flex h-screen w-full overflow-hidden antialiased selection:bg-sky-200" style={{ fontFamily: "'Poppins', sans-serif" }}>
       <Sidebar />
 
-      <main className="flex-1 flex flex-col px-10 py-6 overflow-y-auto h-full">
-        <div className="w-full max-w-7xl mx-auto space-y-6">
+      <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full custom-scrollbar">
+        <div className="w-full max-w-6xl mx-auto space-y-6">
           
+          {/* HEADER TOP BAR */}
           <header className="flex justify-between items-center">
             <div>
-              <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">Smart Auto-Scan Form</span>
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-                {draftIdParam ? 'Edit Draft:' : 'Draft Baru:'} <span className="text-blue-600">{templateInfo?.nama || 'Memuat...'}</span>
+              <h1 className="text-3xl font-black text-slate-800 tracking-tight">
+                {draftIdParam ? 'Edit Draft:' : 'Draft Baru:'}{' '}
+                <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">
+                  {templateInfo?.nama || 'Memuat...'}
+                </span>
               </h1>
             </div>
-            <button onClick={() => navigate(-1)} className="text-xs font-bold text-slate-500 hover:text-slate-800 bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm cursor-pointer">
-              ⬅️ Kembali
+            <button 
+              onClick={() => navigate(-1)} 
+              className="text-xs font-bold text-sky-700 bg-sky-50/80 hover:bg-sky-100 px-4 py-2.5 rounded-2xl border border-sky-100/80 transition-all transform hover:scale-105 active:scale-95 shadow-xs cursor-pointer flex items-center gap-1.5"
+            >
+              <span>⬅️</span> Kembali
             </button>
           </header>
 
           {loadingFetch ? (
-            <div className="bg-white rounded-3xl border border-slate-100 p-20 text-center space-y-4 shadow-sm animate-pulse">
-              <div className="text-4xl text-blue-500 animate-spin inline-block">⏳</div>
-              <p className="text-slate-500 font-bold text-sm">Sinkronisasi data...</p>
+            <div className="bg-white rounded-3xl border border-sky-100/80 p-20 text-center space-y-4 shadow-xs animate-pulse">
+              <div className="text-4xl text-sky-500 animate-spin inline-block">⏳</div>
+              <p className="text-sky-600 font-bold text-xs tracking-wide">Sinkronisasi data dokumen...</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               
-              {/* PANEL KIRI FORM */}
+              {/* PANEL KIRI: FORM ISIAN DATA */}
               <div className="lg:col-span-7">
-                <form onSubmit={handleSelesai} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8 space-y-6">
+                <form onSubmit={handleSelesai} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                   
-                  {/* 🟢 BANNER HIJAU LOGO ROBOT SEBELUMNYA DI SINI SUDAH DIHAPUS 🟢 */}
-
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     
                     {/* KALENDER UTAMA */}
-                    <div className="flex flex-col gap-1.5 md:col-span-2 border-b border-slate-100 pb-3">
-                      <label className="text-xs font-bold text-blue-600">
-                        Tanggal Dokumen <span className="text-slate-400 font-normal">(Hari, Tgl, Bln, Thn Otomatis)</span>
+                    <div className="flex flex-col gap-1.5 md:col-span-2 border-b border-sky-100/80 pb-4">
+                      <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider">
+                        Tanggal Dokumen <span className="text-slate-400 font-normal lowercase">(Hari, Tgl, Bln, Thn Otomatis)</span>
                       </label>
                       <input 
                         type="date"
                         value={calendarDate}
                         onChange={handleCalendarChange}
-                        className="border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:border-blue-500 bg-white"
+                        className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all"
                         required
                       />
                     </div>
@@ -538,25 +573,24 @@ function DraftSuratTugas() {
                         return (
                           <div key={variableName} className={`flex flex-col gap-1.5 ${(isKaryawanField || isKepalaBidangField || isKepalaCabangField) ? 'relative' : ''} ${isPhoto ? 'md:col-span-2' : ''}`}>
                             <div className="flex justify-between items-center">
-                              <label className="text-xs font-bold text-slate-600">
-                                {formatLabel(variableName)} <span className="text-slate-300">({variableName})</span>
+                              <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
+                                {formatLabel(variableName)} <span className="text-slate-400 font-mono text-[10px] font-normal">({variableName})</span>
                               </label>
-                              {/* 🟢 BADGE HIJAU "OTOMATIS TERHITUNG" DI SINI SUDAH DIHAPUS KELUAR 🟢 */}
                             </div>
                             
                             {isPhoto ? (
-                              <div className="flex items-center gap-4 border border-slate-200 rounded-xl p-3 bg-slate-50/30 hover:border-blue-300 transition-all">
+                              <div className="flex items-center gap-4 border border-sky-100/80 rounded-2xl p-3 bg-[#F4F8FC]/50 hover:border-sky-300 transition-all">
                                 <input 
                                   type="file" 
                                   accept="image/*"
                                   onChange={(e) => handleFileChange(e, variableName)}
-                                  className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer flex-1"
+                                  className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer flex-1"
                                 />
                                 {filePreviews[variableName] && (
                                   <img 
                                     src={filePreviews[variableName]} 
                                     alt="Mini Preview" 
-                                    className="w-16 h-12 object-cover rounded-lg border border-slate-200 shadow-sm"
+                                    className="w-16 h-12 object-cover rounded-xl border border-sky-100 shadow-xs"
                                   />
                                 )}
                               </div>
@@ -579,39 +613,39 @@ function DraftSuratTugas() {
                                     if (isKepalaCabangField) setShowKepalaCabangDropdown(false);
                                   }, 250);
                                 }}
-                                className={`border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 bg-slate-50/30 ${isTotalHariField ? 'bg-slate-100 font-bold text-slate-800' : ''}`} 
+                                className={`border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all ${isTotalHariField ? 'bg-sky-50/60 font-bold text-sky-700 border-sky-200' : 'bg-[#F4F8FC]/50 text-slate-700'}`} 
                                 required 
                               />
                             )}
 
-                            {/* DROPDOWN 1: NAMA PEKERJA */}
+                            {/* DROPDOWN AUTOCOMPLETE 1: NAMA PEKERJA */}
                             {isKaryawanField && showKaryawanDropdown && filteredKaryawan.length > 0 && (
-                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
+                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1 custom-scrollbar">
                                 {filteredKaryawan.map(k => (
-                                  <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, variableName)} className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 font-semibold text-slate-700 block">
-                                    {k.nama_lengkap} <span className="text-[10px] text-slate-400 font-normal">({(typeof k.jabatan === 'object' && k.jabatan !== null) ? k.jabatan?.nama_jabatan : (k.jabatan || 'Karyawan')})</span>
+                                  <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, variableName)} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-colors">
+                                    {k.nama_lengkap} <span className="text-[10px] text-sky-500 font-normal">({(typeof k.jabatan === 'object' && k.jabatan !== null) ? k.jabatan?.nama_jabatan : (k.jabatan || 'Karyawan')})</span>
                                   </button>
                                 ))}
                               </div>
                             )}
 
-                            {/* DROPDOWN 2: KEPALA BIDANG */}
+                            {/* DROPDOWN AUTOCOMPLETE 2: KEPALA BIDANG */}
                             {isKepalaBidangField && showKepalaBidangDropdown && filteredKepalaBidang.length > 0 && (
-                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
+                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1 custom-scrollbar">
                                 {filteredKepalaBidang.map(k => (
-                                  <button key={k.id} type="button" onMouseDown={() => pilihKepalaBidang(k)} className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 font-semibold text-slate-700 block">
-                                    {k.nama_lengkap} <span className="text-[10px] text-blue-500 font-normal">({(typeof k.jabatan === 'object' && k.jabatan !== null) ? k.jabatan?.nama_jabatan : (k.jabatan || 'Kabid')})</span>
+                                  <button key={k.id} type="button" onMouseDown={() => pilihKepalaBidang(k)} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-colors">
+                                    {k.nama_lengkap} <span className="text-[10px] text-sky-600 font-normal">({(typeof k.jabatan === 'object' && k.jabatan !== null) ? k.jabatan?.nama_jabatan : (k.jabatan || 'Kabid')})</span>
                                   </button>
                                 ))}
                               </div>
                             )}
 
-                            {/* DROPDOWN 3: KEPALA CABANG */}
+                            {/* DROPDOWN AUTOCOMPLETE 3: KEPALA CABANG */}
                             {isKepalaCabangField && showKepalaCabangDropdown && filteredKepalaCabang.length > 0 && (
-                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
+                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1 custom-scrollbar">
                                 {filteredKepalaCabang.map(k => (
-                                  <button key={k.id} type="button" onMouseDown={() => pilihKepalaCabang(k)} className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 font-semibold text-slate-700 block">
-                                    {k.nama_lengkap} <span className="text-[10px] text-emerald-500 font-normal">({(typeof k.jabatan === 'object' && k.jabatan !== null) ? k.jabatan?.nama_jabatan : (k.jabatan || 'Pimpinan')})</span>
+                                  <button key={k.id} type="button" onMouseDown={() => pilihKepalaCabang(k)} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-colors">
+                                    {k.nama_lengkap} <span className="text-[10px] text-blue-600 font-normal">({(typeof k.jabatan === 'object' && k.jabatan !== null) ? k.jabatan?.nama_jabatan : (k.jabatan || 'Pimpinan')})</span>
                                   </button>
                                 ))}
                               </div>
@@ -622,38 +656,50 @@ function DraftSuratTugas() {
                       })}
                   </div>
 
-                  <div className="pt-6 border-t border-slate-100 flex flex-wrap justify-end gap-3">
-                    <button type="button" onClick={handleSaveDraft} disabled={loadingDraft || loadingSelesai} className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-5 py-3 rounded-xl text-xs transition-all disabled:opacity-50 cursor-pointer">
+                  <div className="pt-6 border-t border-sky-100 flex flex-wrap justify-end gap-3">
+                    <button 
+                      type="button" 
+                      onClick={handleSaveDraft} 
+                      disabled={loadingDraft || loadingSelesai} 
+                      className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
+                    >
                       {loadingDraft ? 'Menyimpan...' : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'}
                     </button>
                     
-                    <button type="submit" disabled={loadingDraft || loadingSelesai} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-3 rounded-xl text-xs transition-all disabled:opacity-50 cursor-pointer">
-                      {loadingSelesai ? 'Memproses...' : '✨ Selesai & Kirim Ke Antrean'}
+                    <button 
+                      type="submit" 
+                      disabled={loadingDraft || loadingSelesai} 
+                      className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
+                    >
+                      {loadingSelesai ? 'Memproses...' : '& Kirim Ke Antrean'}
                     </button>
                   </div>
 
                 </form>
               </div>
 
-              {/* PANEL KANAN PREVIEW */}
-              <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-100 shadow-sm p-6 sticky top-6 h-[calc(100vh-140px)] flex flex-col">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-3">
+              {/* PANEL KANAN: LIVE PREVIEW DOKUMEN */}
+              <div className="lg:col-span-5 bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-6 sticky top-6 h-[calc(100vh-140px)] flex flex-col">
+                <div className="flex items-center justify-between pb-3.5 border-b border-sky-100/80 mb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-base">📄</span>
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Live Document Preview</h3>
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Live Document Preview</h3>
                   </div>
-                  <span className="text-[10px] bg-blue-50 text-blue-600 font-bold px-2.5 py-1 rounded-full animate-pulse">Auto Sync</span>
+                  <span className="text-[10px] bg-sky-50 text-sky-600 font-bold px-2.5 py-1 rounded-full border border-sky-100">Auto Sync</span>
                 </div>
 
-                <div className="bg-blue-50/70 border border-blue-100 rounded-2xl p-3.5 mb-3 flex items-start gap-2.5 text-[11px] leading-relaxed text-blue-800 font-medium">
+                <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-3.5 mb-3 flex items-start gap-2.5 text-[11px] leading-relaxed text-sky-950 font-medium">
                   <span className="text-sm mt-0.5">💡</span>
                   <div>
-                    <strong className="text-blue-900">Sistem Nomor Dokumen:</strong> Nomor surat yang tertera di live preview saat ini hanyalah <strong>contoh/estimasi sementara</strong>. Nomor resmi yang asli akan otomatis disesuaikan secara akurat berdasarkan urutan terakhir di database saat dokumen dicetak.
+                    <strong className="text-sky-900 font-bold">Sistem Nomor Dokumen:</strong> Nomor surat yang tertera di live preview saat ini hanyalah <strong className="text-sky-700">contoh/estimasi sementara</strong>. Nomor resmi akan disesuaikan otomatis saat dicetak.
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto border border-slate-100 rounded-2xl bg-white p-6 shadow-inner">
-                  {renderLivePreview()}
+                {/* AREA LEMBAR KERTAS PREVIEW REALISTIS */}
+                <div className="flex-1 overflow-y-auto border border-sky-100/80 rounded-2xl bg-slate-100/70 p-4 shadow-inner custom-scrollbar">
+                  <div className="bg-white rounded-xl border border-slate-200/80 shadow-md p-6 min-h-full">
+                    {renderLivePreview()}
+                  </div>
                 </div>
               </div>
 

@@ -12,10 +12,6 @@ function SiapCetak() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // STATE PARAMETER: Mengatur rangkap dan halaman berdasarkan ID Dokumen
-  const [documentCopies, setDocumentCopies] = useState({});
-  const [documentPages, setDocumentPages] = useState({});
-
   // Helper untuk mengambil token autentikasi
   const getAuthConfig = useCallback(() => {
     const token = localStorage.getItem('token');
@@ -32,11 +28,11 @@ function SiapCetak() {
     setLoading(true);
     axios.get(`${API_BASE_URL}/siap-cetak`, getAuthConfig())
       .then(res => {
-        setAntreanList(res.data.data || res.data || []);
+        const dataHasil = res.data.data || res.data || [];
+        setAntreanList(dataHasil);
       })
       .catch(err => {
         console.error("Gagal memuat data antrean cetak:", err);
-        alert("❌ Gagal memuat data dari server. Silakan coba beberapa saat lagi.");
       })
       .finally(() => {
         setLoading(false);
@@ -47,67 +43,34 @@ function SiapCetak() {
     ambilAntreanCetak();
   }, [ambilAntreanCetak]);
 
-  // 3. AKSI: DOWNLOAD FILE
-  const handleDownloadAction = (id) => {
-    axios.get(`${API_BASE_URL}/siap-cetak/${id}/download`, getAuthConfig())
-      .then((res) => {
-        if (res.data.download_url) {
-          const link = document.createElement('a');
-          link.href = res.data.download_url;
-          link.setAttribute('download', ''); 
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        } else {
-          alert("❌ URL download tidak ditemukan dalam respon server.");
-        }
-      })
-      .catch(err => {
-        console.error("Gagal mengunduh file dokumen:", err);
-        alert("❌ Gagal mendownload file dokumen. Pastikan token valid atau file tersedia.");
-      });
-  };
-
-  // 4. AKSI: PRINT & UPDATE STATUS (SOLUSI TAB BARU ANTI-BLOCK BROWSER)
+  // 3. AKSI: PRINT & UPDATE STATUS
   const handlePrintAction = (id, namaDokumen) => {
-    const rangkap = documentCopies[id] || 1;
-    const halamanRaw = documentPages[id] || '';
-    const halaman = halamanRaw.trim() === '' ? 'All' : halamanRaw;
-
     axios.put(`${API_BASE_URL}/siap-cetak/${id}/status`, {
-      copies: rangkap,
-      pages: halaman
+      copies: 1,
+      pages: 'All'
     }, getAuthConfig())
       .then((res) => {
-        const pdfUrl = res.data.pdf_url; // Ambil URL PDF dari Laravel
+        const pdfUrl = res.data.pdf_url;
 
         if (pdfUrl) {
-          // 🚀 Buka tab baru dengan URL PDF-nya
           const printWindow = window.open(pdfUrl, '_blank');
           
           if (printWindow) {
-            // Tunggu halaman tab baru ter-load, lalu langsung pancing dialog print
             printWindow.onload = () => {
               printWindow.focus();
               printWindow.print();
             };
-          } else {
-            // Jika browser memblokir pop-up otomatis, ingatkan user
-            alert("⚠️ Browser memblokir pop-up. Izinkan pop-up di browser kamu agar dialog cetak bisa terbuka otomatis.");
           }
-        } else {
-          alert("❌ URL PDF tidak ditemukan dalam respon server.");
         }
 
         ambilAntreanCetak(); 
       })
       .catch(err => {
         console.error("Gagal memperbarui status cetak:", err);
-        alert("❌ Gagal memproses aksi print.");
       });
   };
 
-  // 5. AKSI FINAL A: UNGGAH FOTO BUKTI TANDA TANGAN (Untuk BA Penyerahan / BA Kerusakan)
+  // 4. AKSI FINAL A: UNGGAH FOTO BUKTI TANDA TANGAN
   const handleUploadAction = (id, event) => {
     const fileTarget = event.target.files[0];
     if (!fileTarget) return;
@@ -119,38 +82,60 @@ function SiapCetak() {
 
     axios.post(`${API_BASE_URL}/siap-cetak/${id}/upload`, formData, config)
       .then(() => {
-        alert("🎉 Foto bukti TTD berhasil diunggah dan dokumen otomatis dipindahkan ke arsip!");
         ambilAntreanCetak(); 
       })
       .catch(err => {
         console.error("Detail Error Upload:", err.response ? err.response.data : err);
-        alert("❌ Ups, gagal mengunggah bukti file.");
       });
   };
 
-  // 6. AKSI FINAL B: KHUSUS SURAT TUGAS (Langsung Selesai tanpa Upload, foto_ttd diset 'tanpa_ttd' di backend)
+  // 5. AKSI FINAL B: KHUSUS SURAT TUGAS
   const handleSelesaiSuratTugas = (id) => {
-    const yakin = window.confirm("Apakah Anda yakin ingin menyelesaikan Surat Tugas ini dan memindahkannya ke arsip?");
-    if (!yakin) return;
-
-    // Mengirim request ke endpoint baru di Laravel
     axios.post(`${API_BASE_URL}/siap-cetak/${id}/selesai`, {}, getAuthConfig())
       .then(() => {
-        alert("🎉 Surat Tugas berhasil diselesaikan dan langsung dipindahkan ke arsip!");
         ambilAntreanCetak(); 
       })
       .catch(err => {
         console.error("Detail Error Selesai Surat Tugas:", err.response ? err.response.data : err);
-        alert("❌ Gagal menyelesaikan Surat Tugas. Silakan hubungi admin.");
       });
   };
 
-  // 🛠️ DYNAMIC FILTERING BERDASARKAN KATEGORI TAB & KEYWORD
+  // HELPER PINTAR REKURSIF: Menggeledah isi objek untuk melacak field variabel form
+  const dapatkanValueSakti = (inputObj, targetKey) => {
+    if (!inputObj) return null;
+
+    let obj = inputObj;
+    if (typeof obj === 'string') {
+      try { obj = JSON.parse(obj); } catch (e) { return null; }
+    }
+
+    if (typeof obj !== 'object' || obj === null) return null;
+
+    const targetLower = targetKey.toLowerCase();
+
+    for (const key of Object.keys(obj)) {
+      if (key.toLowerCase() === targetLower) {
+        const val = obj[key];
+        if (val !== null && val !== undefined && val !== '') return val;
+      }
+    }
+
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val && (typeof val === 'object' || (typeof val === 'string' && val.trim().startsWith('{')))) {
+        const hasilDalam = dapatkanValueSakti(val, targetKey);
+        if (hasilDalam) return hasilDalam;
+      }
+    }
+
+    return null;
+  };
+
+  // DYNAMIC FILTERING
   const daftarFileTerfilter = useMemo(() => {
     const lowerSearch = searchTerm.toLowerCase();
     
     return antreanList.filter(item => {
-      // Jika sudah memiliki 'foto_ttd' (berupa path foto atau 'tanpa_ttd'), keluarkan dari antrean!
       if (item.foto_ttd) return false;
 
       const namaDokumen = (item.nama_dokumen || '').toLowerCase();
@@ -169,73 +154,68 @@ function SiapCetak() {
     });
   }, [antreanList, searchTerm, activeTab]);
 
-  const handlePageChange = (id, value) => {
-    setDocumentPages(prev => ({ ...prev, [id]: value }));
-  };
-
-  const handleCopiesChange = (id, value) => {
-    const parsed = parseInt(value, 10);
-    setDocumentCopies(prev => ({ ...prev, [id]: isNaN(parsed) || parsed < 1 ? 1 : parsed }));
-  };
-
   const dapatkanWarnaTab = (tabName) => {
     if (activeTab !== tabName) return 'border-transparent text-slate-400 hover:text-slate-600';
-    if (tabName === 'ba_penyerahan') return 'border-blue-600 text-blue-600 font-extrabold';
-    if (tabName === 'ba_kerusakan') return 'border-amber-500 text-amber-600 font-extrabold';
-    if (tabName === 'surat_tugas') return 'border-indigo-600 text-indigo-600 font-extrabold';
-    return '';
+    return 'border-sky-500 text-sky-600 font-black';
+  };
+
+  const formatTanggalBerangkat = (dateStr) => {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr; 
+    return d.toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
   };
 
   return (
-    <div 
-      className="bg-[#F8FAFC] text-slate-700 flex h-screen w-full overflow-hidden antialiased" 
-      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-    >
-      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-      
+    <div id="siap-cetak-wrapper" className="bg-[#F4F8FC] text-slate-700 flex h-screen w-full overflow-hidden antialiased">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap');
+        
+        #siap-cetak-wrapper, 
+        #siap-cetak-wrapper *,
+        #siap-cetak-wrapper input,
+        #siap-cetak-wrapper button,
+        #siap-cetak-wrapper table,
+        #siap-cetak-wrapper th,
+        #siap-cetak-wrapper td {
+          font-family: 'Poppins', sans-serif !important;
+        }
+      `}</style>
+
       <Sidebar />
 
-      <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full">
+      <main className="flex-1 flex flex-col px-8 py-8 overflow-y-auto h-full custom-scrollbar">
         <div className="w-full max-w-6xl mx-auto space-y-6">
           
           {/* HEADER SECTION */}
           <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">Pusat Kendali Cetak</span>
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-                Antrean <span className="text-blue-600">Proses Berkas</span>
+              <h1 className="text-2xl font-black text-slate-800 tracking-tight mt-0.5">
+                Antrean <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">Proses Berkas</span>
               </h1>
-              <p className="text-xs text-slate-400 font-medium mt-1">
-                Kelola berkas aktif secara terpusat berdasarkan kategori: sesuaikan kustomisasi cetak fisik, lalu finalisasi dengan upload bukti atau penyelesaian langsung.
-              </p>
             </div>
 
             {/* SEARCH BAR */}
             <div className="relative max-w-xs w-full">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-sm">🔍</span>
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 text-sm">
+                🔍
+              </span>
               <input 
                 type="text"
                 placeholder="Cari berkas di tab ini..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium shadow-sm focus:outline-none focus:border-blue-500 transition-all"
+                className="w-full pl-9 pr-4 py-2 bg-white border border-sky-100 rounded-2xl text-xs font-medium shadow-xs focus:outline-none focus:border-sky-400 transition-all"
               />
             </div>
           </section>
 
-          {/* 1. KOTAK INFORMASI / PERINGATAN */}
-          <section className="bg-blue-50/60 border border-blue-100 rounded-2xl p-3.5 flex items-start gap-3 text-xs text-blue-800">
-            <span className="text-lg select-none mt-0.5">💡</span>
-            <div>
-              <p className="font-bold mb-0.5">Alur Kerja Operasional Berkas:</p>
-              <p className="text-blue-700/90 font-medium">
-                Sesuaikan isi parameter <span className="font-bold text-blue-900">Halaman & Rangkap</span>, lakukan <span className="font-bold text-blue-900">PRINT FISIK</span>, dan selesaikan dengan menekan tombol <span className="font-bold text-blue-900">UPLOAD BUKTI TTD</span> (untuk BA) atau langsung tekan tombol <span className="font-bold text-blue-900">SELESAI</span> (khusus Surat Tugas).
-              </p>
-            </div>
-          </section>
-
-          {/* 2. NAVIGASI 3 TAB */}
-          <div className="flex border-b border-slate-200 gap-2">
+          {/* NAVIGASI 3 TAB */}
+          <div className="flex border-b border-sky-100 gap-2">
             <button
               type="button"
               onClick={() => setActiveTab('ba_penyerahan')}
@@ -261,122 +241,107 @@ function SiapCetak() {
 
           {/* MAIN DISPLAY DATA BOARD */}
           {loading ? (
-            <div className="bg-white rounded-3xl border border-slate-100 p-20 text-center space-y-4 shadow-sm animate-pulse">
-              <div className="text-4xl text-blue-500 animate-spin inline-block">⏳</div>
-              <p className="text-slate-500 font-bold text-sm">Sedang memilah berkas dari database...</p>
+            <div className="bg-white rounded-3xl border border-sky-100/80 p-16 text-center space-y-4 shadow-xs animate-pulse">
+              <div className="text-4xl text-sky-500 animate-spin inline-block">⏳</div>
+              <p className="text-sky-600 font-bold text-xs">Sedang memilah berkas dari database...</p>
             </div>
           ) : daftarFileTerfilter.length === 0 ? (
-            <div className="bg-white rounded-3xl border border-slate-100 p-20 text-center space-y-3 shadow-sm">
+            <div className="bg-white rounded-3xl border border-sky-100/80 p-16 text-center space-y-3 shadow-xs">
               <div className="text-4xl">✨</div>
-              <p className="text-slate-400 font-semibold text-sm">Tab dokumen ini sedang kosong!</p>
-              <p className="text-xs text-slate-300">Tidak ada data antrean aktif yang terdeteksi untuk kategori ini.</p>
+              <p className="text-slate-500 font-bold text-sm">Tab dokumen ini sedang kosong!</p>
+              <p className="text-xs text-slate-400">Tidak ada data antrean aktif yang terdeteksi untuk kategori ini.</p>
             </div>
           ) : (
-            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[1000px]">
+            <div className="bg-white rounded-3xl border border-sky-100/80 shadow-xs overflow-hidden">
+              <div className="w-full">
+                <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      <th className="py-4 px-6 w-[35%]">Detail Nama Berkas</th>
-                      <th className="py-4 px-4 w-[15%]">Staf Pembuat</th>
-                      <th className="py-4 px-6 text-center w-[55%]">Konfigurasi & Finalisasi Cetak</th>
+                    <tr className="bg-gradient-to-r from-sky-50/70 to-blue-50/50 border-b border-sky-100 text-[10px] font-extrabold text-sky-800 uppercase tracking-wider">
+                      <th className="py-3.5 px-4 w-[65%]">Detail Nama Berkas</th>
+                      <th className="py-3.5 px-4 text-center w-[35%]">Aksi Cetak & Finalisasi</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50 text-xs font-semibold text-slate-600">
+                  <tbody className="divide-y divide-sky-50 text-xs font-semibold text-slate-600">
                     {daftarFileTerfilter.map((file) => {
                       const namaTampilan = file.nama_arsip_display || file.nama_dokumen;
+                      
+                      // Mengambil variabel khusus dari form / data_input
+                      const namaItem = dapatkanValueSakti(file, 'ITEM') || dapatkanValueSakti(file, 'NO_ITEM');
+                      const namaAlat = dapatkanValueSakti(file, 'NAMA_ALAT') || dapatkanValueSakti(file, 'NAMA_BARANG') || dapatkanValueSakti(file, 'ITEM');
+                      
+                      // Ambil khusus tanggal berangkat dari variabel form
+                      const tglBerangkatInput = 
+                        dapatkanValueSakti(file, 'TANGGAL_BERANGKAT') || 
+                        dapatkanValueSakti(file, 'TGL_BERANGKAT') || 
+                        dapatkanValueSakti(file, 'TANGGAL') || 
+                        file.tgl_berangkat || 
+                        file.tanggal_berangkat;
 
                       return (
-                        <tr key={file.id} className="hover:bg-slate-50/50 transition-all">
+                        <tr 
+                          key={file.id} 
+                          className="hover:bg-sky-50/50 transition-all duration-300 transform hover:scale-[1.01] hover:shadow-md hover:z-10 relative cursor-pointer group"
+                        >
                           
-                          {/* 1. DETAIL FILE & DOWNLOAD */}
-                          <td className="py-4 px-6">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <span className="text-2xl select-none flex-shrink-0">📄</span>
-                                <div className="min-w-0">
-                                  <p className="text-slate-900 font-bold truncate max-w-[240px]" title={namaTampilan}>
-                                    {namaTampilan}
+                          {/* DETAIL FILE */}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-3">
+                              <span className="text-2xl select-none flex-shrink-0 transition-transform duration-300 group-hover:scale-110">📄</span>
+                              <div className="min-w-0">
+                                <p className="text-slate-900 font-bold truncate max-w-[480px]" title={namaTampilan}>
+                                  {namaTampilan}
+                                </p>
+                                
+                                {/* 1. SURAT TUGAS */}
+                                {activeTab === 'surat_tugas' && (
+                                  <p className="text-[10px] text-sky-600 font-semibold mt-0.5 flex items-center gap-1">
+                                    📅 Berangkat: {formatTanggalBerangkat(tglBerangkatInput || file.created_at)}
                                   </p>
-                                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">ID: #{file.id} | Temp: #{file.template_id}</p>
-                                </div>
+                                )}
+
+                                {/* 2. BA PENYERAHAN: HANYA ITEM */}
+                                {activeTab === 'ba_penyerahan' && (
+                                  <p className="text-[10px] text-sky-600 font-semibold mt-0.5 flex items-center gap-2 truncate max-w-[480px]">
+                                    <span>📦 Item: {namaItem || <span className="italic text-slate-400">[Tidak ada nama item]</span>}</span>
+                                  </p>
+                                )}
+
+                                {/* 3. BA KERUSAKAN: HANYA ALAT */}
+                                {activeTab === 'ba_kerusakan' && (
+                                  <p className="text-[10px] text-amber-600 font-semibold mt-0.5 flex items-center gap-2 truncate max-w-[480px]">
+                                    <span>⚠️ Alat: {namaAlat || <span className="italic text-slate-400">[Tidak ada nama alat]</span>}</span>
+                                  </p>
+                                )}
+
                               </div>
+                            </div>
+                          </td>
+
+                          {/* ACTION PIPELINE */}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center justify-center gap-3">
                               
-                              <button
+                              <button 
                                 type="button"
-                                onClick={() => handleDownloadAction(file.id)}
-                                className="bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200/60 px-2 py-1.5 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 flex-shrink-0 shadow-sm whitespace-nowrap mr-2"
+                                onClick={() => handlePrintAction(file.id, namaTampilan)} 
+                                className="bg-slate-800 text-white px-3.5 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider hover:bg-slate-900 transition-all shadow-xs hover:shadow-md cursor-pointer whitespace-nowrap flex items-center gap-1.5"
                               >
-                                📥 Download
+                                🖨️ PRINT FISIK
                               </button>
-                            </div>
-                          </td>
 
-                          {/* 2. OPERATOR */}
-                          <td className="py-4 px-4">
-                            <div className="flex flex-col">
-                              <span className="text-slate-800 font-bold flex items-center gap-1">
-                                👤 {file.user?.username || 'Operator Admin'}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-medium mt-0.5">Penanggungjawab</span>
-                            </div>
-                          </td>
+                              <span className="text-sky-200 text-sm font-light select-none">|</span>
 
-                          {/* 3. ACTION PIPELINE CONVEYOR */}
-                          <td className="py-4 px-6">
-                            <div className="flex items-center justify-end gap-3.5">
-                              
-                              <div className="flex items-center gap-2 bg-slate-100/60 border border-slate-200/80 p-1.5 rounded-2xl shadow-inner">
-                                {/* Input Halaman */}
-                                <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-xl focus-within:border-blue-400 transition-colors">
-                                  <span className="text-[9px] text-slate-400 font-bold uppercase select-none">Hal:</span>
-                                  <input 
-                                    type="text" 
-                                    value={documentPages[file.id] ?? ''} 
-                                    placeholder="All"
-                                    onChange={(e) => handlePageChange(file.id, e.target.value)} 
-                                    className="w-12 bg-transparent font-extrabold text-center text-[11px] text-slate-800 outline-none placeholder-slate-400" 
-                                  />
-                                </div>
-
-                                {/* Input Rangkap */}
-                                <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-xl focus-within:border-blue-400 transition-colors">
-                                  <span className="text-[9px] text-slate-400 font-bold uppercase select-none">Rangkap:</span>
-                                  <input 
-                                    type="number" 
-                                    value={documentCopies[file.id] || 1} 
-                                    min="1" 
-                                    onChange={(e) => handleCopiesChange(file.id, e.target.value)} 
-                                    className="w-6 bg-transparent font-extrabold text-center text-[11px] text-slate-800 outline-none" 
-                                  />
-                                </div>
-
-                                {/* Tombol Print Fisik */}
-                                <button 
-                                  type="button"
-                                  onClick={() => handlePrintAction(file.id, namaTampilan)} 
-                                  className="bg-slate-900 text-white px-3.5 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-slate-800 transition-all shadow-sm cursor-pointer whitespace-nowrap"
-                                >
-                                  🖨️ PRINT FISIK
-                                </button>
-                              </div>
-
-                              <span className="text-slate-300 text-sm font-light select-none">|</span>
-
-                              {/* TOMBOL AKSI AKHIR KONDISIONAL */}
                               {activeTab === 'surat_tugas' ? (
-                                // Tombol Khusus Surat Tugas (Selesai Tanpa Upload File)
                                 <button
                                   type="button"
                                   onClick={() => handleSelesaiSuratTugas(file.id)}
-                                  className="bg-emerald-600 text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700 transition-all shadow-md shadow-emerald-100 cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                                  className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700 transition-all shadow-xs hover:shadow-md cursor-pointer whitespace-nowrap flex items-center gap-1"
                                 >
                                   ✅ SELESAI
                                 </button>
                               ) : (
-                                // Tombol Default untuk BA (Wajib Upload Foto TTD)
-                                <label className="inline-block bg-violet-600 text-white px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider hover:bg-violet-700 transition-all shadow-md shadow-violet-100 cursor-pointer whitespace-nowrap">
-                                  📤 UPLOAD BUKTI TTD
+                                <label className="inline-block bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-xs shadow-sky-200 cursor-pointer whitespace-nowrap">
+                                  📤 UPLOAD TTD
                                   <input 
                                     type="file" 
                                     className="hidden" 

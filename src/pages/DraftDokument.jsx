@@ -3,6 +3,62 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import axios from 'axios';
 
+// HELPER PINTAR: Mengambil nilai key secara case-insensitive dari object data_input
+const getVal = (obj, keys) => {
+  if (!obj || typeof obj !== 'object') return '';
+  for (const k of keys) {
+    for (const key of Object.keys(obj)) {
+      if (key.toLowerCase() === k.toLowerCase() && obj[key]) {
+        return String(obj[key]).trim();
+      }
+    }
+  }
+  return '';
+};
+
+// HELPER PINTAR: Penentu format nama draft sesuai kategori
+const formatNamaDraft = (file) => {
+  let dataInput = file.data_input;
+  if (typeof dataInput === 'string') {
+    try { dataInput = JSON.parse(dataInput); } catch (e) { dataInput = {}; }
+  }
+  dataInput = dataInput || {};
+
+  const namaTemplate = file.template?.nama || '';
+  const jenisId = file.jenis_dokumen_id || file.template?.jenis_dokumen_id;
+  
+  const isKerusakan = jenisId ? (jenisId === 2 || jenisId === '2') : namaTemplate.toLowerCase().includes('kerusakan');
+  const isSuratTugas = jenisId ? (jenisId === 3 || jenisId === '3') : namaTemplate.toLowerCase().includes('surat tugas');
+  const isPenyerahan = !isKerusakan && !isSuratTugas;
+
+  // 1. BA KERUSAKAN -> Panggil Nama Alat
+  if (isKerusakan) {
+    const namaAlat = getVal(dataInput, ['nama_alat', 'alat', 'nama_barang']);
+    if (namaAlat) return `BA Kerusakan - ${namaAlat}`;
+    return `BA Kerusakan - Draft Baru`;
+  }
+
+  // 2. BA PENYERAHAN -> Panggil Item
+  if (isPenyerahan) {
+    const item = getVal(dataInput, ['item', 'no_item', 'nama_item', 'nama_barang']);
+    if (item) return `BA Penyerahan - ${item}`;
+    return `BA Penyerahan - Draft Baru`;
+  }
+
+  // 3. SURAT TUGAS -> Panggil Nama Pekerja & Lokasi (dalam kurung)
+  if (isSuratTugas) {
+    const pekerja = getVal(dataInput, ['nama_pekerja', 'pekerja', 'nama']);
+    const lokasi = getVal(dataInput, ['lokasi', 'lokasi_kerja', 'tempat']);
+    
+    if (pekerja && lokasi) return `Surat Tugas - ${pekerja} (${lokasi})`;
+    if (pekerja) return `Surat Tugas - ${pekerja}`;
+    if (lokasi) return `Surat Tugas - (${lokasi})`;
+    return `Surat Tugas - Draft Baru`;
+  }
+
+  return `${namaTemplate || 'Dokumen'} - Draft Baru`;
+};
+
 function DraftDokumen() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -13,7 +69,7 @@ function DraftDokumen() {
   const [searchTerm, setSearchTerm] = useState('');
   const [kategoriAktif, setKategoriAktif] = useState('Semua'); 
 
-  // Deteksi otomatis kategori dari URL jika diakses dari klik Sidebar tertentu
+  // Deteksi otomatis kategori dari URL
   useEffect(() => {
     if (location.pathname.includes('kerusakan')) {
       setKategoriAktif('Kerusakan');
@@ -50,246 +106,214 @@ function DraftDokumen() {
 
   // Fungsi Hapus Draft File
   const handleHapusDraft = (id) => {
-    if (!window.confirm("Apakah kamu yakin ingin menghapus draft dokumen ini?")) return;
-
     const token = localStorage.getItem('token');
     axios.delete(`http://localhost:8000/api/drafts/${id}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     .then(() => {
-      alert("🗑️ Draft berhasil dihapus!");
       ambilDaftarDraft(); 
     })
     .catch(err => console.error("Gagal menghapus:", err));
   };
 
-  // 🛠️ ENGINE FILTER & PENCARIAN FILE
+  // ENGINE FILTER & PENCARIAN FILE
   const daftarFileTerfilter = drafts.filter(file => {
-    const namaTemplate = file.template?.nama || 'Dokumen';
-    const dataInput = typeof file.data_input === 'string' 
-      ? JSON.parse(file.data_input) 
-      : (file.data_input || {});
-    
-    const jenisId = file.jenis_dokumen_id || file.template?.jenis_dokumen_id;
-    const isSuratTugas = jenisId ? (jenisId === 3 || jenisId === '3') : namaTemplate.toLowerCase().includes('surat tugas');
-
-    let namaDraftFinal = file.nama_draft || '';
-    
-    if (!namaDraftFinal || namaDraftFinal.toLowerCase().includes('draft baru')) {
-      if (isSuratTugas) {
-        const pekerja = dataInput.nama_pekerja || '';
-        const lokasi = dataInput.lokasi || '';
-        namaDraftFinal = pekerja || lokasi ? `${namaTemplate} - ${pekerja} ${lokasi}`.trim() : `${namaTemplate} - Draft Baru`;
-      } else {
-        const pengidentifikasi = dataInput.item || dataInput.nama_alat || '';
-        namaDraftFinal = pengidentifikasi ? `${namaTemplate} - ${pengidentifikasi}` : `${namaTemplate} - Draft Baru`;
-      }
-    }
-    
+    const namaDraftFinal = formatNamaDraft(file);
     const cocokNama = namaDraftFinal.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const namaTemplate = file.template?.nama || '';
+    const jenisId = file.jenis_dokumen_id || file.template?.jenis_dokumen_id;
+    const isKerusakan = jenisId ? (jenisId === 2 || jenisId === '2') : namaTemplate.toLowerCase().includes('kerusakan');
+    const isSuratTugas = jenisId ? (jenisId === 3 || jenisId === '3') : namaTemplate.toLowerCase().includes('surat tugas');
 
     if (kategoriAktif === 'Kerusakan') {
       if (jenisId) return cocokNama && (jenisId === 2 || jenisId === '2');
-      return cocokNama && namaDraftFinal.toLowerCase().includes('kerusakan');
+      return cocokNama && isKerusakan;
     }
     
     if (kategoriAktif === 'Penyerahan') {
       if (jenisId) return cocokNama && (jenisId === 1 || jenisId === '1');
-      return cocokNama && !namaDraftFinal.toLowerCase().includes('kerusakan') && !namaDraftFinal.toLowerCase().includes('surat tugas'); 
+      return cocokNama && !isKerusakan && !isSuratTugas; 
     }
 
     if (kategoriAktif === 'Surat Tugas') {
       if (jenisId) return cocokNama && (jenisId === 3 || jenisId === '3');
-      return cocokNama && namaDraftFinal.toLowerCase().includes('surat tugas');
+      return cocokNama && isSuratTugas;
     }
     
     return cocokNama;
   });
 
   return (
-    <div className="bg-[#F8FAFC] text-slate-700 flex h-screen w-full overflow-hidden antialiased" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <div className="bg-[#F4F8FC] text-slate-700 flex h-screen w-full overflow-hidden antialiased selection:bg-sky-200" style={{ fontFamily: "'Poppins', sans-serif" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
       
       <Sidebar />
 
-      <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full">
+      <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full custom-scrollbar">
         <div className="w-full max-w-6xl mx-auto space-y-6">
           
-          {/* TOP SECTION HEADER */}
+          {/* HEADER SEKSI */}
           <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">Daftar Dokumen Tersimpan</span>
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-                File Manager: <span className="text-blue-600">Draft {kategoriAktif !== 'Semua' ? kategoriAktif : 'BA & Surat Tugas'}</span>
+              <h1 className="text-3xl font-black text-slate-800 tracking-tight">
+                Draft <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">{kategoriAktif !== 'Semua' ? kategoriAktif : 'BA & Surat Tugas'}</span>
               </h1>
-              <p className="text-xs text-slate-400 font-medium mt-1">Gunakan halaman ini untuk melihat, mengubah isian data, atau menghapus file draf.</p>
             </div>
           </section>
 
           {/* FILTER BAR & SEARCH CONTROLLER */}
-          <section className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl">
+          <section className="bg-white p-3.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            
+            {/* TAB KATEGORI */}
+            <div className="flex items-center gap-1.5 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60">
               {['Semua', 'Kerusakan', 'Penyerahan', 'Surat Tugas'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setKategoriAktif(tab)}
-                  className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer transform active:scale-95 ${
                     kategoriAktif === tab 
-                      ? 'bg-white text-blue-600 shadow-sm' 
-                      : 'text-slate-500 hover:text-slate-800'
+                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.03]' 
+                      : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
                   }`}
                 >
                   {tab === 'Semua' 
-                    ? '📂 Semua Draft' 
+                    ? '📂 Semua' 
                     : tab === 'Kerusakan' 
                     ? '⚠️ BA Kerusakan' 
                     : tab === 'Penyerahan' 
                     ? '🤝 BA Penyerahan' 
-                    : '📝 Surat Tugas'}
+                    : '💼 Surat Tugas'}
                 </button>
               ))}
             </div>
 
+            {/* INPUT PENCARIAN */}
             <div className="relative max-w-xs w-full">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-sm">🔍</span>
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-sky-400 text-xs">🔍</span>
               <input 
                 type="text"
-                placeholder="Cari nama draft file..."
+                placeholder="Cari nama draft..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-blue-500 transition-all"
+                className="w-full pl-9 pr-4 py-2 bg-[#F4F8FC]/80 border border-sky-100 rounded-2xl text-xs font-medium text-slate-700 placeholder:text-slate-300 focus:outline-none focus:border-sky-400 focus:bg-white focus:ring-2 focus:ring-sky-100 transition-all shadow-2xs"
               />
             </div>
           </section>
 
           {/* MAIN FILE DISPLAY BOARD */}
           {loading ? (
-            <div className="bg-white rounded-3xl border border-slate-100 p-20 text-center space-y-4 shadow-sm animate-pulse">
-              <div className="text-4xl text-blue-500 animate-spin inline-block">⏳</div>
-              <p className="text-slate-500 font-bold text-sm">Sedang sinkronisasi data file draf kamu...</p>
+            <div className="bg-white rounded-3xl border border-sky-100/80 p-20 text-center space-y-4 shadow-sm shadow-sky-100/50 animate-pulse">
+              <div className="text-4xl text-sky-500 animate-spin inline-block">⏳</div>
+              <p className="text-sky-500 font-bold text-xs tracking-wide">Sedang menyinkronkan data file draf kamu...</p>
             </div>
           ) : daftarFileTerfilter.length === 0 ? (
-            <div className="bg-white rounded-3xl border border-slate-100 p-20 text-center space-y-3 shadow-sm">
-              <div className="text-4xl">📂</div>
-              <p className="text-slate-400 font-semibold text-sm">Belum ada file draf terdaftar untuk kategori ini.</p>
-              <p className="text-xs text-slate-300">Silakan buat dokumen baru lewat menu Master File Template.</p>
+            <div className="bg-white rounded-3xl border border-sky-100/80 p-20 text-center space-y-3 shadow-sm shadow-sky-100/50">
+              <div className="text-4xl select-none">📭</div>
+              <p className="text-slate-500 font-bold text-sm">Belum ada file draft terdaftar untuk kategori ini</p>
+              <p className="text-xs text-sky-500/80 font-medium">Kamu bisa buat dokumen baru lewat menu Master File Template!</p>
             </div>
           ) : (
-            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    <th className="py-4 px-6 w-[50%]">Nama Dokumen Draft</th>
-                    <th className="py-4 px-4">Kategori</th>
-                    <th className="py-4 px-4">Tanggal Diperbarui</th>
-                    <th className="py-4 px-6 text-center">Aksi Manajemen</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 text-xs font-semibold text-slate-600">
-                  {daftarFileTerfilter.map((draft) => {
-                    const namaTemplate = draft.template?.nama || 'Dokumen';
-                    const dataInput = typeof draft.data_input === 'string' 
-                      ? JSON.parse(draft.data_input) 
-                      : (draft.data_input || {});
-                    
-                    const jenisId = draft.jenis_dokumen_id || draft.template?.jenis_dokumen_id;
-                    const isKerusakan = jenisId ? (jenisId === 2 || jenisId === '2') : namaTemplate.toLowerCase().includes('kerusakan');
-                    const isSuratTugas = jenisId ? (jenisId === 3 || jenisId === '3') : namaTemplate.toLowerCase().includes('surat tugas');
+            <div className="bg-white rounded-3xl border border-sky-200/80 shadow-md shadow-sky-100/60 p-3 space-y-2">
+              
+              {/* HEADER TABEL */}
+              <div className="grid grid-cols-12 px-6 py-3 bg-[#F4F8FC] rounded-2xl text-[10px] font-extrabold text-sky-600 uppercase tracking-wider">
+                <div className="col-span-6">Nama Dokumen Draft</div>
+                <div className="col-span-2">Kategori</div>
+                <div className="col-span-2">Diperbarui</div>
+                <div className="col-span-2 text-center">Aksi</div>
+              </div>
 
-                    // ✨ RUTE NAVIGASI DINAMIS (FIX SALAH KAMAR)
-                    const targetRoute = isKerusakan 
-                      ? '/draft-kerusakan' 
-                      : isSuratTugas 
-                      ? '/draft-surat-tugas' 
-                      : '/draft-penyerahan';
+              {/* LIST FRAME DRAFT */}
+              <div className="space-y-2.5">
+                {daftarFileTerfilter.map((draft) => {
+                  const namaDraftFinalVisual = formatNamaDraft(draft);
 
-                    let namaDraftFinalVisual = draft.nama_draft || '';
-                    if (!namaDraftFinalVisual || namaDraftFinalVisual.toLowerCase().includes('draft baru')) {
-                      if (isSuratTugas) {
-                        const namaPekerja = dataInput.nama_pekerja || '';
-                        const lokasiKerja = dataInput.lokasi ? ` (${dataInput.lokasi})` : '';
-                        
-                        if (namaPekerja || lokasiKerja) {
-                          namaDraftFinalVisual = `${namaTemplate} - ${namaPekerja}${lokasiKerja}`.trim();
-                        } else {
-                          namaDraftFinalVisual = `${namaTemplate} - Draft Baru`;
-                        }
-                      } else {
-                        const alat = dataInput.item || dataInput.nama_alat || '';
-                        namaDraftFinalVisual = alat ? `${namaTemplate} - ${alat}` : `${namaTemplate} - Draft Baru`;
-                      }
-                    }
-                    
-                    let teksBadge = 'BA Penyerahan';
-                    let warnaBadge = 'bg-blue-50 text-blue-600 border border-blue-100';
+                  const namaTemplate = draft.template?.nama || 'Dokumen';
+                  const jenisId = draft.jenis_dokumen_id || draft.template?.jenis_dokumen_id;
+                  const isKerusakan = jenisId ? (jenisId === 2 || jenisId === '2') : namaTemplate.toLowerCase().includes('kerusakan');
+                  const isSuratTugas = jenisId ? (jenisId === 3 || jenisId === '3') : namaTemplate.toLowerCase().includes('surat tugas');
 
-                    if (isKerusakan) {
-                      teksBadge = 'BA Kerusakan';
-                      warnaBadge = 'bg-amber-50 text-amber-600 border border-amber-100';
-                    } else if (isSuratTugas) {
-                      teksBadge = 'Surat Tugas';
-                      warnaBadge = 'bg-purple-50 text-purple-600 border border-purple-100';
-                    }
+                  const targetRoute = isKerusakan 
+                    ? '/draft-kerusakan' 
+                    : isSuratTugas 
+                    ? '/draft-surat-tugas' 
+                    : '/draft-penyerahan';
 
-                    return (
-                      <tr key={draft.id} className="hover:bg-slate-50/50 transition-all">
-                        <td className="py-4 px-6 flex items-center gap-3">
-                          <span className="text-2xl select-none">📄</span>
-                          <div>
-                            {/* Klik Judul Menuju Halaman Edit yang Benar */}
-                            <p 
-                              className="text-slate-900 font-bold hover:text-blue-600 transition-all cursor-pointer" 
-                              onClick={() => navigate(`${targetRoute}?draft_id=${draft.id}`)}
-                            >
-                              {namaDraftFinalVisual}
-                            </p>
-                            
-                            {/* ✨ SEKSI SUB-INFO BARU: ID REFERENSI & BADGE NAMA PEMBUAT */}
-                            <div className="text-[10px] text-slate-400 font-medium mt-0.5 flex items-center gap-2">
-                              <span>ID Referensi: #{draft.id}</span>
-                              <span className="text-slate-200">|</span>
-                              <span className="inline-flex items-center gap-0.5 font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-100/50">
-                                👤 {draft.user?.name || draft.user?.username || draft.user?.nama || 'Unknown'}
-                              </span>
-                            </div>
+                  let teksBadge = '🤝 Penyerahan';
+                  let warnaBadge = 'bg-emerald-50/90 text-emerald-600 border border-emerald-100';
+
+                  if (isKerusakan) {
+                    teksBadge = '⚠️ Kerusakan';
+                    warnaBadge = 'bg-rose-50/90 text-rose-600 border border-rose-100';
+                  } else if (isSuratTugas) {
+                    teksBadge = '💼 Surat Tugas';
+                    warnaBadge = 'bg-sky-100/80 text-sky-700 border border-sky-200/60';
+                  }
+
+                  return (
+                    <div 
+                      key={draft.id} 
+                      className="grid grid-cols-12 items-center px-6 py-3.5 bg-white hover:bg-sky-50/30 rounded-2xl border border-sky-100/80 hover:border-sky-300 shadow-xs hover:shadow-lg hover:shadow-sky-100/80 transition-all duration-300 transform hover:scale-[1.01] hover:-translate-y-0.5 group cursor-default"
+                    >
+                      {/* INFORMASI DRAFT */}
+                      <div className="col-span-6 flex items-center gap-3.5">
+                        <div className="bg-gradient-to-br from-sky-100/80 to-blue-50 text-sky-600 w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-2xs border border-sky-100 group-hover:scale-110 group-hover:shadow-md group-hover:shadow-sky-200/60 transition-all duration-300 shrink-0">
+                          📄
+                        </div>
+                        <div>
+                          <p 
+                            className="text-slate-800 font-bold group-hover:text-sky-600 transition-colors cursor-pointer text-xs" 
+                            onClick={() => navigate(`${targetRoute}?draft_id=${draft.id}`)}
+                          >
+                            {namaDraftFinalVisual}
+                          </p>
+                          
+                          <div className="text-[10px] text-slate-400 font-medium mt-1 flex items-center gap-2">
+                            <span>ID: #{draft.id}</span>
+                            <span className="text-sky-200">•</span>
+                            <span className="inline-flex items-center gap-1 font-semibold text-sky-600 bg-sky-50/80 px-2 py-0.5 rounded-lg border border-sky-100/80">
+                              👤 {draft.user?.name || draft.user?.username || draft.user?.nama || 'Unknown'}
+                            </span>
                           </div>
-                        </td>
+                        </div>
+                      </div>
 
-                        <td className="py-4 px-4">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${warnaBadge}`}>
-                            {teksBadge}
-                          </span>
-                        </td>
+                      {/* BADGE KATEGORI */}
+                      <div className="col-span-2">
+                        <span className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold uppercase tracking-wider inline-block ${warnaBadge}`}>
+                          {teksBadge}
+                        </span>
+                      </div>
 
-                        <td className="py-4 px-4 text-slate-400 font-medium">
-                          {draft.updated_at ? new Date(draft.updated_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
-                        </td>
+                      {/* TANGGAL */}
+                      <div className="col-span-2 text-slate-400 text-[11px] font-medium">
+                        🕒 {draft.updated_at ? new Date(draft.updated_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                      </div>
 
-                        <td className="py-4 px-6 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            {/* Tombol Edit Menuju Halaman Edit yang Benar */}
-                            <button 
-                              onClick={() => navigate(`${targetRoute}?draft_id=${draft.id}`)}
-                              className="bg-slate-50 border border-slate-200 text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 p-2 px-4 rounded-xl transition-all cursor-pointer font-bold text-xs"
-                              title="Edit Data Variabel"
-                            >
-                              ✏️ Edit
-                            </button>
+                      {/* TOMBOL AKSI */}
+                      <div className="col-span-2 flex items-center justify-center gap-2">
+                        <button 
+                          onClick={() => navigate(`${targetRoute}?draft_id=${draft.id}`)}
+                          className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent px-3.5 py-1.5 rounded-xl transition-all duration-300 cursor-pointer font-bold text-[11px] flex items-center gap-1 active:scale-95 shadow-2xs hover:shadow-md hover:shadow-sky-200/60 transform hover:-translate-y-0.5"
+                          title="Edit Data Variabel"
+                        >
+                          <span>✏️</span> Edit
+                        </button>
 
-                            <button 
-                              onClick={() => handleHapusDraft(draft.id)}
-                              className="bg-white border border-red-100 text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all cursor-pointer"
-                              title="Hapus Dokumen"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        <button 
+                          onClick={() => handleHapusDraft(draft.id)}
+                          className="bg-rose-50/80 hover:bg-rose-500 text-rose-500 hover:text-white p-1.5 rounded-xl border border-rose-100 hover:border-transparent transition-all duration-300 cursor-pointer active:scale-95 transform hover:-translate-y-0.5 shadow-2xs hover:shadow-md hover:shadow-rose-200/50"
+                          title="Hapus Dokumen"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
             </div>
           )}
 

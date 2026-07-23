@@ -21,13 +21,13 @@ function DraftKerusakan() {
   const [loadingDraft, setLoadingDraft] = useState(false); 
   const [loadingSelesai, setLoadingSelesai] = useState(false); 
 
-  // State & Ref Preview Foto di Frontend (Fix Stale Closure)
+  // State & Ref Preview Foto di Frontend
   const [filePreviews, setFilePreviews] = useState({});
   const filePreviewsRef = useRef({});
 
   // State Khusus Kalender Master & Counter Otomatis
   const [calendarDate, setCalendarDate] = useState('');
-  const [nextCounter, setNextCounter] = useState(1); // Menyimpan angka urutan surat (cth: 1, 2, 3)
+  const [nextCounter, setNextCounter] = useState(1); 
 
   // State Autocomplete Karyawan
   const [karyawanList, setKaryawanList] = useState([]); 
@@ -50,9 +50,9 @@ function DraftKerusakan() {
     .catch(err => console.error("Gagal memuat data karyawan:", err));
   }, []);
 
-  // Helper untuk menyusun format nomor surat otomatis (Semua BA digabung)
+  // Helper untuk menyusun format nomor surat otomatis
   const buatFormatNomor = useCallback((counter, tanggalObj) => {
-    const angkaPad = String(counter).padStart(3, '0'); // Mengubah 1 menjadi 001
+    const angkaPad = String(counter).padStart(3, '0');
     const romawiMap = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
     const bulanRomawi = romawiMap[tanggalObj.getMonth()];
     const tahun = tanggalObj.getFullYear();
@@ -89,7 +89,6 @@ function DraftKerusakan() {
 
           setFormData(cleanedData);
           
-          // Extrak counter angka dari nomor lama biar kalau kalender diedit counternya tetap sama
           const nomorEksis = cleanedData.no || '';
           const matchCounter = nomorEksis.match(/^(\d+)/);
           if (matchCounter) {
@@ -131,7 +130,6 @@ function DraftKerusakan() {
           initialFormState['tahun'] = String(yyyy);
           initialFormState['tanggal_input'] = tglString;
 
-          // Request nomor urut gabungan terbaru dari backend
           axios.get('http://localhost:8000/api/dokumen/next-counter', {
             headers: { 'Authorization': `Bearer ${token}` }
           })
@@ -256,7 +254,6 @@ function DraftKerusakan() {
       setFilteredLaporan(hasil);
       setShowLaporanDropdown(hasil.length > 0);
 
-      // Jika teks di input nama laporan dihapus bersih, kolom bidang otomatis ikut bersih
       if (value.trim() === '') {
         setFormData(prev => ({ ...prev, bidang_laporan: '' }));
       }
@@ -293,7 +290,6 @@ function DraftKerusakan() {
       const newFormData = { ...prev, [tipeVariable]: karyawan.nama_lengkap };
       
       if (tipeVariable === 'nama_laporan') {
-        // Fallback berjenjang mengambil nama bidang/bagian dari objek relasi karyawan
         newFormData['bidang_laporan'] = 
           karyawan.bidang?.nama_bidang || 
           karyawan.bidang || 
@@ -336,7 +332,7 @@ function DraftKerusakan() {
     data.append('nama_item', formData['nama_alat'] || '');
     data.append('spesifikasi', spesifikasiGabungan);
     data.append('jumlah', 1); 
-    data.append('keterangan_item', formData['keterangan_kerusakan'] || '')
+    data.append('keterangan_item', formData['keterangan_kerusakan'] || '');
 
     Object.keys(formData).forEach(key => {
       let item = formData[key];
@@ -439,6 +435,9 @@ function DraftKerusakan() {
     return text.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
+  // =========================================================================
+  // LIVE PREVIEW DENGAN AKSEN SKY BLUE SESUAI FILE TEMPLATE
+  // =========================================================================
   const renderLivePreview = () => {
     if (!textContent) {
       return <p className="text-slate-400 italic text-center py-10">Memuat teks preview...</p>;
@@ -452,8 +451,8 @@ function DraftKerusakan() {
       if (variable.startsWith('foto_')) {
         const urlFotoLokal = filePreviews[variable];
         const replacementPhoto = urlFotoLokal
-          ? `<img src="${urlFotoLokal}" class="max-w-[140px] max-h-[100px] object-cover rounded-xl border border-amber-300 my-1.5 shadow-sm inline-block" />`
-          : `<span class="bg-slate-100 text-slate-400 px-2 py-1 rounded font-mono text-[10px] border border-slate-200 block text-center my-1 border-dashed">📷 [Slot ${formatLabel(variable)}]</span>`;
+          ? `<img src="${urlFotoLokal}" class="max-w-[140px] max-h-[100px] object-cover rounded-2xl border border-sky-200 my-1.5 shadow-xs inline-block" />`
+          : `<span class="text-sky-600 font-bold text-[11px]">[Foto ${formatLabel(variable)}]</span>`;
         
         processedHTML = processedHTML.replaceAll(`\${${variable}}`, replacementPhoto);
         return;
@@ -465,8 +464,8 @@ function DraftKerusakan() {
       }
       
       const replacementText = userValue 
-        ? `<span class="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded font-semibold border border-amber-200 mx-0.5">${userValue}</span>`
-        : `<span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono text-[10px] border border-slate-200 mx-0.5">${variable}</span>`;
+        ? `<span class="text-sky-600 font-bold">${userValue}</span>`
+        : `<span class="text-slate-400 font-mono text-[10px]">[${variable}]</span>`;
       
       processedHTML = processedHTML.replaceAll(`\${${variable}}`, replacementText);
     });
@@ -479,10 +478,10 @@ function DraftKerusakan() {
       };
       const nilaiRomawi = romawiMap[userValueBulan] || 'VI';
 
-      const replacementRomawi = `<span class="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded font-semibold border border-amber-200 mx-0.5">${nilaiRomawi}</span>`;
+      const replacementRomawi = `<span class="text-sky-600 font-bold">${nilaiRomawi}</span>`;
       const replacementTeks = userValueBulan 
-        ? `<span class="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded font-semibold border border-amber-200 mx-0.5">${userValueBulan}</span>`
-        : `<span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono text-[10px] border border-slate-200 mx-0.5">bulan</span>`;
+        ? `<span class="text-sky-600 font-bold">${userValueBulan}</span>`
+        : `<span class="text-slate-400 font-mono text-[10px]">[bulan]</span>`;
 
       processedHTML = processedHTML.replaceAll('\\text{${bulan}}', replacementRomawi);
       processedHTML = processedHTML.replaceAll('${bulan}', replacementTeks);
@@ -491,59 +490,66 @@ function DraftKerusakan() {
     return (
       <div 
         dangerouslySetInnerHTML={{ __html: processedHTML }} 
-        className="text-slate-700 leading-relaxed space-y-3 whitespace-pre-line break-words text-xs tracking-normal [&_table]:!w-auto [&_table]:!max-w-full [&_td]:!p-2 [&_table]:border-collapse [&_table]:border [&_table]:border-slate-300 [&_td]:border [&_td]:border-slate-300 [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50"
+        className="text-slate-700 leading-relaxed space-y-3 whitespace-pre-line break-words text-xs tracking-normal [&_table]:!w-auto [&_table]:!max-w-full [&_td]:!p-2 [&_table]:border-collapse [&_table]:border [&_table]:border-slate-200 [&_td]:border [&_td]:border-slate-200 [&_th]:border [&_th]:border-slate-200 [&_th]:bg-slate-50"
       />
     );
   };
 
   return (
-    <div className="bg-[#F8FAFC] text-slate-700 flex h-screen w-full overflow-hidden antialiased" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <div 
+      className="bg-[#F4F8FC] text-slate-700 flex h-screen w-full overflow-hidden antialiased selection:bg-sky-200" 
+      style={{ fontFamily: "'Poppins', sans-serif" }}
+    >
       <Sidebar />
 
-      <main className="flex-1 flex flex-col px-10 py-6 overflow-y-auto h-full">
-        <div className="w-full max-w-7xl mx-auto space-y-6">
+      <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full custom-scrollbar">
+        <div className="w-full max-w-6xl mx-auto space-y-6">
           
           <header className="flex justify-between items-center">
             <div>
-              <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">Smart Auto-Scan Form</span>
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-                {draftIdParam ? 'Edit Draft:' : 'Draft Baru:'} <span className="text-blue-600">{templateInfo?.nama || 'Memuat...'}</span>
+              <h1 className="text-3xl font-black text-slate-800 tracking-tight">
+                {draftIdParam ? 'Edit Draft:' : 'Draft Baru:'}{' '}
+                <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">
+                  {templateInfo?.nama || 'Memuat...'}
+                </span>
               </h1>
             </div>
-            <button onClick={() => navigate(-1)} className="text-xs font-bold text-slate-500 hover:text-slate-800 bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm cursor-pointer">
+            <button 
+              onClick={() => navigate(-1)} 
+              className="text-xs font-bold text-sky-700 bg-sky-50/80 hover:bg-sky-100 px-4 py-2.5 rounded-2xl border border-sky-100/80 transition-all transform hover:scale-105 active:scale-95 shadow-xs cursor-pointer flex items-center gap-1.5"
+            >
               ⬅️ Kembali
             </button>
           </header>
 
           {loadingFetch ? (
-            <div className="bg-white rounded-3xl border border-slate-100 p-20 text-center space-y-4 shadow-sm animate-pulse">
-              <div className="text-4xl text-blue-500 animate-spin inline-block">⏳</div>
-              <p className="text-slate-500 font-bold text-sm">Sinkronisasi data...</p>
+            <div className="bg-white rounded-3xl border border-sky-100/80 p-20 text-center space-y-4 shadow-xs">
+              <div className="text-4xl text-sky-500 animate-spin inline-block">⏳</div>
+              <p className="text-sky-600 font-bold text-xs">Sinkronisasi data...</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               
               {/* PANEL KIRI FORM */}
               <div className="lg:col-span-7">
-                <form onSubmit={handleSelesai} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8 space-y-6">
+                <form onSubmit={handleSelesai} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                   
-                  <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex items-center gap-3 text-xs text-emerald-800 font-medium">
+                  <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-sky-950 font-medium">
                     <span>🤖</span>
                     <p><b>Sinkronisasi Kalender & Form Aktif!</b> Input data di bawah langsung ter-sinkronisasi ke berkas preview secara langsung.</p>
                   </div>
 
                   {/* KALENDER UTAMA */}
-                  <div className="border-b border-slate-100 pb-4">
+                  <div className="border-b border-sky-100/80 pb-4">
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-blue-600">
-                        Tanggal Dokumen <span className="text-slate-400 font-normal">(Hari, Tgl, Bln, Thn Otomatis)</span>
+                      <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider">
+                        Tanggal Dokumen <span className="text-slate-400 font-normal lowercase">(Hari, Tgl, Bln, Thn Otomatis)</span>
                       </label>
                       <input 
                         type="date"
                         value={calendarDate}
                         onChange={handleCalendarChange}
-                        className="border border-blue-200 bg-blue-50/5 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-blue-500 w-full"
+                        className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all"
                         required
                       />
                     </div>
@@ -557,28 +563,27 @@ function DraftKerusakan() {
                         const isLaporan = variableName === 'nama_laporan';
                         const isPenanggung = variableName === 'nama_penanggung';
                         const isPengetahui = variableName === 'nama_pengetahui';
-                        const isBidang = variableName === 'bidang_laporan'; 
                         const isPhoto = variableName.startsWith('foto_');
                         
                         return (
                           <div key={variableName} className={`flex flex-col gap-1.5 ${isLaporan || isPenanggung || isPengetahui ? 'relative' : ''} ${isPhoto ? 'md:col-span-2' : ''}`}>
-                            <label className="text-xs font-bold text-slate-600">
-                              {formatLabel(variableName)} <span className="text-slate-300">({variableName})</span>
+                            <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
+                              {formatLabel(variableName)} <span className="text-slate-400 font-mono text-[10px] font-normal">({variableName})</span>
                             </label>
                             
                             {isPhoto ? (
-                              <div className="flex items-center gap-4 border border-slate-200 rounded-xl p-3 bg-slate-50/30 hover:border-blue-300 transition-all">
+                              <div className="flex items-center gap-4 border border-sky-100/80 rounded-2xl p-3 bg-[#F4F8FC]/50 hover:border-sky-300 transition-all">
                                 <input 
                                   type="file" 
                                   accept="image/*"
                                   onChange={(e) => handleFileChange(e, variableName)}
-                                  className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer flex-1"
+                                  className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer flex-1"
                                 />
                                 {filePreviews[variableName] && (
                                   <img 
                                     src={filePreviews[variableName]} 
                                     alt="Mini Preview" 
-                                    className="w-16 h-12 object-cover rounded-lg border border-slate-200 shadow-sm"
+                                    className="w-16 h-12 object-cover rounded-xl border border-sky-100 shadow-xs"
                                   />
                                 )}
                               </div>
@@ -588,7 +593,7 @@ function DraftKerusakan() {
                                   name={variableName}
                                   value={formData[variableName] || ''}
                                   onChange={handleChange}
-                                  className="border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 bg-slate-50/30 h-20 resize-none"
+                                  className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all h-20 resize-none"
                                   required
                                 />
                               ) : (
@@ -609,7 +614,7 @@ function DraftKerusakan() {
                                       if (isPengetahui) setShowPengetahuiDropdown(false);
                                     }, 200);
                                   }}
-                                  className="border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 bg-slate-50/30 border-slate-200"
+                                  className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all"
                                   required 
                                 />
                               )
@@ -617,9 +622,9 @@ function DraftKerusakan() {
 
                             {/* DROPDOWN AUTOCOMPLETE */}
                             {isLaporan && showLaporanDropdown && filteredLaporan.length > 0 && (
-                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
+                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
                                 {filteredLaporan.map(k => (
-                                  <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_laporan')} className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 font-semibold text-slate-700 block">
+                                  <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_laporan')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
                                     {k.nama_lengkap} <span className="text-[10px] text-slate-400 font-normal">({k.jabatan?.nama_jabatan})</span>
                                   </button>
                                 ))}
@@ -627,9 +632,9 @@ function DraftKerusakan() {
                             )}
 
                             {isPenanggung && showPenanggungDropdown && filteredPenanggung.length > 0 && (
-                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
+                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
                                 {filteredPenanggung.map(k => (
-                                  <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_penanggung')} className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 font-semibold text-slate-700 block">
+                                  <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_penanggung')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
                                     {k.nama_lengkap} <span className="text-[10px] text-slate-400 font-normal">({k.jabatan?.nama_jabatan})</span>
                                   </button>
                                 ))}
@@ -637,9 +642,9 @@ function DraftKerusakan() {
                             )}
 
                             {isPengetahui && showPengetahuiDropdown && filteredPengetahui.length > 0 && (
-                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
+                              <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
                                 {filteredPengetahui.map(k => (
-                                  <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_pengetahui')} className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 font-semibold text-slate-700 block">
+                                  <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_pengetahui')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
                                     {k.nama_lengkap} <span className="text-[10px] text-slate-400 font-normal">({k.jabatan?.nama_jabatan})</span>
                                   </button>
                                 ))}
@@ -650,12 +655,22 @@ function DraftKerusakan() {
                       })}
                   </div>
 
-                  <div className="pt-6 border-t border-slate-100 flex flex-wrap justify-end gap-3">
-                    <button type="button" onClick={handleSaveDraft} disabled={loadingDraft || loadingSelesai} className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-5 py-3 rounded-xl text-xs transition-all disabled:opacity-50 cursor-pointer">
+                  {/* TOMBOL DENGAN GRADASI SKY-BLUE SEPERTI FILE TEMPLATE */}
+                  <div className="pt-6 border-t border-sky-100 flex flex-wrap justify-end gap-3">
+                    <button 
+                      type="button" 
+                      onClick={handleSaveDraft} 
+                      disabled={loadingDraft || loadingSelesai} 
+                      className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
+                    >
                       {loadingDraft ? 'Menyimpan...' : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'}
                     </button>
-                    <button type="submit" disabled={loadingDraft || loadingSelesai} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-3 rounded-xl text-xs transition-all disabled:opacity-50 cursor-pointer">
-                      {loadingSelesai ? 'Memproses...' : '✨ Selesai & Kirim Ke Antrean'}
+                    <button 
+                      type="submit" 
+                      disabled={loadingDraft || loadingSelesai} 
+                      className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
+                    >
+                      {loadingSelesai ? 'Memproses...' : 'Selesai & Kirim Ke Antrean'}
                     </button>
                   </div>
 
@@ -663,26 +678,27 @@ function DraftKerusakan() {
               </div>
 
               {/* PANEL KANAN PREVIEW */}
-              <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-100 shadow-sm p-6 sticky top-6 h-[calc(100vh-140px)] flex flex-col">
-                
-                <div className="bg-blue-50/70 border border-blue-100 rounded-2xl p-3.5 mb-3 flex items-start gap-2.5 text-[11px] leading-relaxed text-blue-800 font-medium">
+              <div className="lg:col-span-5 bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-6 sticky top-6 h-[calc(100vh-140px)] flex flex-col">
+                <div className="flex items-center justify-between pb-4 border-b border-sky-100/80 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📄</span>
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Live Document Preview</h3>
+                  </div>
+                  <span className="text-[10px] bg-sky-50 text-sky-600 font-bold px-2.5 py-1 rounded-full border border-sky-100">Auto Sync</span>
+                </div>
+
+                <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-3.5 mb-3 flex items-start gap-2.5 text-[11px] leading-relaxed text-sky-950 font-medium">
                   <span className="text-sm mt-0.5">💡</span>
                   <div>
-                    <strong className="text-blue-900">Sistem Nomor Dokumen:</strong> Nomor surat yang tertera di live preview saat ini hanyalah <strong>contoh/estimasi sementara</strong>. Nomor resmi yang asli akan otomatis disesuaikan secara akurat berdasarkan urutan terakhir di database saat dokumen dicetak.
+                    <strong className="text-sky-900">Sistem Nomor Dokumen:</strong> Nomor surat yang tertera di live preview saat ini hanyalah <strong>contoh/estimasi sementara</strong>. Nomor resmi yang asli akan otomatis disesuaikan secara akurat berdasarkan urutan terakhir di database saat dokumen dicetak.
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">📄</span>
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Live Document Preview</h3>
-                  </div>
-                  <span className="text-[10px] bg-blue-50 text-blue-600 font-bold px-2.5 py-1 rounded-full animate-pulse">Auto Sync</span>
-                </div>
-                <div className="flex-1 overflow-y-auto border border-slate-100 rounded-2xl bg-white p-6 shadow-inner">
+                <div className="flex-1 overflow-y-auto border border-sky-100/80 rounded-2xl bg-white p-6 shadow-inner custom-scrollbar">
                   {renderLivePreview()}
                 </div>
               </div>
+
             </div>
           )}
         </div>
