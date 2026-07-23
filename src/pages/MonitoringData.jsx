@@ -14,9 +14,6 @@ function MonitoringData() {
   // STATE UNTUK POP-UP MODAL RINCIAN
   const [selectedFileForModal, setSelectedFileForModal] = useState(null);
 
-  // STATE PARAMETER: Mengatur konfigurasi cetak per ID dokumen secara dinamis
-  const [printConfigs, setPrintConfigs] = useState({});
-
   const BASE_URL = 'http://localhost:8000/api';
 
   const fetchAllFilesForMonitoring = async () => {
@@ -33,15 +30,6 @@ function MonitoringData() {
       const result = await response.json();
       if (response.ok && result.status === 'success') {
         setFileList(result.data);
-        
-        const initialConfigs = {};
-        result.data.forEach(file => {
-          initialConfigs[file.id] = {
-            hal: file.halaman && file.halaman !== '-' ? file.halaman : '',
-            rangkap: file.print_rangkap || 1
-          };
-        });
-        setPrintConfigs(initialConfigs);
       }
     } catch (error) {
       console.error("Gagal memuat data monitoring:", error);
@@ -50,20 +38,8 @@ function MonitoringData() {
     }
   };
 
-  const handleConfigChange = (id, field, value) => {
-    setPrintConfigs(prev => ({
-      ...prev,
-      [id]: {
-        ...prev[id],
-        [field]: value
-      }
-    }));
-  };
-
-  const handlePrintFisik = (id, filename) => {
-    const config = printConfigs[id] || { hal: '', rangkap: 1 };
-    const halaman = config.hal.trim() === '' ? 'All' : config.hal;
-    alert(`🖨️ Mengirim perintah cetak ke mesin printer:\nDokumen: ${filename}\nHalaman: ${halaman}\nJumlah Rangkap: ${config.rangkap}x`);
+  const handlePrintFisik = (filename) => {
+    alert(`🖨️ Mengirim perintah cetak ke mesin printer:\nDokumen: ${filename}`);
   };
 
   const handleLihatFile = (file) => {
@@ -163,7 +139,7 @@ function MonitoringData() {
             </div>
           </section>
 
-          {/* MAIN CONTAINER FRAME DENGAN SOFT SHADOW & EFEK ELEGAN */}
+          {/* MAIN CONTAINER FRAME */}
           {loading ? (
             <div className="mt-6 bg-white rounded-[28px] border border-sky-100 p-16 text-center space-y-3 shadow-xl shadow-sky-100/50">
               <div className="text-3xl text-sky-500 animate-spin inline-block">⏳</div>
@@ -177,31 +153,29 @@ function MonitoringData() {
           ) : (
             <div className="mt-6 bg-white rounded-[28px] border border-sky-200/70 p-5 shadow-xl shadow-sky-100/60 space-y-3">
               
-              {/* HEADER BAR BANNER (FLEXBOX ALIGNMENT) */}
+              {/* HEADER BAR BANNER */}
               <div className="hidden md:flex items-center justify-between bg-[#F4F8FC] px-6 py-3 rounded-2xl text-[10px] font-extrabold text-sky-600 uppercase tracking-wider">
                 <div className="flex-1">DETAIL NAMA BERKAS</div>
                 <div className="w-36 text-center shrink-0">ROLE</div>
-                <div className="shrink-0 text-right w-[440px]">KONFIGURASI &amp; TINDAKAN</div>
+                <div className="shrink-0 text-right w-52">TINDAKAN</div>
               </div>
 
-              {/* LIST CARD ROWS PER BERKAS (FLEXBOX ANTI-KETIMPA + ANIMASI ZOOM) */}
+              {/* LIST CARD ROWS PER BERKAS */}
               <div className="space-y-3">
                 {filteredFiles.map((file) => {
-                  const currentConfig = printConfigs[file.id] || { hal: '', rangkap: 1 };
-
                   return (
                     <div 
                       key={file.id}
                       className="bg-white border border-sky-200/80 rounded-2xl p-3.5 md:px-5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-md shadow-sky-100/40 hover:shadow-xl hover:shadow-sky-200/50 hover:border-sky-300 transform hover:scale-[1.01] hover:-translate-y-0.5 transition-all duration-300 ease-out"
                     >
-                      {/* 1. DETAIL NAMA BERKAS (FLEX GROW) */}
+                      {/* 1. DETAIL NAMA BERKAS */}
                       <div className="flex items-center gap-3.5 flex-1 min-w-0 w-full md:w-auto">
                         <div className="bg-sky-50 text-sky-500 w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 border border-sky-100/80 shadow-xs">
                           📄
                         </div>
                         <div className="min-w-0 flex-1">
                           <p 
-                            className="text-slate-800 font-bold hover:text-sky-600 transition-colors cursor-pointer text-xs truncate max-w-[260px]" 
+                            className="text-slate-800 font-bold hover:text-sky-600 transition-colors cursor-pointer text-xs truncate max-w-[280px]" 
                             onClick={() => setSelectedFileForModal(file)}
                             title={file.nama_dokumen}
                           >
@@ -218,7 +192,7 @@ function MonitoringData() {
                         </div>
                       </div>
 
-                      {/* 2. BADGE ROLE (LOCKED WIDTH & SHRINK-0 -> BEBAS BENTROK) */}
+                      {/* 2. BADGE ROLE */}
                       <div className="shrink-0 w-36 text-center flex justify-center">
                         <span className={`text-[9px] px-3 py-1 rounded-xl font-black uppercase tracking-wider inline-block border shadow-2xs whitespace-nowrap ${
                           file.user?.role === 'master_admin' ? 'bg-purple-50 border-purple-100 text-purple-600' :
@@ -228,60 +202,23 @@ function MonitoringData() {
                         </span>
                       </div>
 
-                      {/* 3. KONFIGURASI & TINDAKAN (LOCKED SHRINK-0) */}
-                      <div className="shrink-0 flex items-center justify-end gap-2 flex-wrap md:flex-nowrap">
-                        
-                        {/* Tombol Lihat */}
-                        <button 
+                      {/* 3. TINDAKAN (TOMBOL CETAK & NONAKTIF) */}
+                      <div className="shrink-0 flex items-center justify-end gap-2 w-52">
+                        {/* Tombol Cetak Fisik */}
+                        <button
                           type="button"
-                          onClick={() => setSelectedFileForModal(file)}
-                          className="bg-sky-50 hover:bg-sky-500 text-sky-600 hover:text-white border border-sky-100 px-3 py-1.5 rounded-xl transition-all cursor-pointer font-bold text-[11px] flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                          onClick={() => handlePrintFisik(file.nama_dokumen)}
+                          className="bg-slate-900 hover:bg-black text-white px-3.5 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-xs cursor-pointer whitespace-nowrap select-none active:scale-95"
                         >
-                          👁️ Lihat
+                          🖨️ CETAK FISIK
                         </button>
-
-                        {/* PILL CONVEYOR WIDGET */}
-                        <div className="flex items-center gap-1.5 bg-[#F4F8FC] border border-sky-100/90 p-1 rounded-xl shadow-2xs">
-                          {/* Input Hal */}
-                          <div className="flex items-center gap-1 bg-white border border-sky-100 px-2 py-0.5 rounded-lg">
-                            <span className="text-[9px] text-slate-400 font-extrabold uppercase select-none">Hal:</span>
-                            <input 
-                              type="text" 
-                              value={currentConfig.hal}
-                              placeholder="All"
-                              onChange={(e) => handleConfigChange(file.id, 'hal', e.target.value)}
-                              className="w-8 bg-transparent font-black text-center text-[11px] text-slate-800 outline-none placeholder-slate-300"
-                            />
-                          </div>
-
-                          {/* Input Rangkap */}
-                          <div className="flex items-center gap-1 bg-white border border-sky-100 px-2 py-0.5 rounded-lg">
-                            <span className="text-[9px] text-slate-400 font-extrabold uppercase select-none">Rkp:</span>
-                            <input 
-                              type="number" 
-                              min="1"
-                              value={currentConfig.rangkap}
-                              onChange={(e) => handleConfigChange(file.id, 'rangkap', parseInt(e.target.value) || 1)}
-                              className="w-5 bg-transparent font-black text-center text-[11px] text-slate-800 outline-none"
-                            />
-                          </div>
-
-                          {/* Tombol Cetak Fisik */}
-                          <button
-                            type="button"
-                            onClick={() => handlePrintFisik(file.id, file.nama_dokumen)}
-                            className="bg-slate-900 hover:bg-black text-white px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-xs cursor-pointer whitespace-nowrap select-none"
-                          >
-                            🖨️ CETAK FISIK
-                          </button>
-                        </div>
 
                         {/* AKSI KHUSUS MASTER ADMIN: "Nonaktif" */}
                         {userRole === 'master_admin' && (
                           <button 
                             type="button"
                             onClick={() => alert('Arsip dinonaktifkan')}
-                            className="bg-rose-50 border border-rose-100 text-rose-500 hover:bg-rose-500 hover:text-white px-2.5 py-1.5 rounded-xl transition-all cursor-pointer font-bold text-[11px] flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                            className="bg-rose-50 border border-rose-100 text-rose-500 hover:bg-rose-500 hover:text-white px-2.5 py-2 rounded-xl transition-all cursor-pointer font-bold text-[11px] flex items-center gap-1 shadow-2xs whitespace-nowrap active:scale-95"
                             title="Nonaktifkan Dokumen"
                           >
                             🚫 Nonaktif
@@ -333,12 +270,6 @@ function MonitoringData() {
               <div className="grid grid-cols-3 bg-[#F4F8FC] p-3 rounded-2xl border border-sky-100/60">
                 <span className="text-slate-400 font-medium">Template ID</span>
                 <span className="col-span-2 text-slate-800 font-bold">#{selectedFileForModal.template_id || '1'}</span>
-              </div>
-              <div className="grid grid-cols-3 bg-[#F4F8FC] p-3 rounded-2xl border border-sky-100/60">
-                <span className="text-slate-400 font-medium">Print Awal</span>
-                <span className="col-span-2 text-slate-800 font-bold">
-                  {printConfigs[selectedFileForModal.id]?.rangkap || 1} Rangkap (Hal: {printConfigs[selectedFileForModal.id]?.hal || 'All'})
-                </span>
               </div>
 
               {/* Master File Dokumen */}

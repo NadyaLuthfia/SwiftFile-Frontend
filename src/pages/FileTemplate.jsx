@@ -199,13 +199,8 @@ function FileTemplate() {
                         📄
                       </div>
                       
-                      <span className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold uppercase tracking-wide border shadow-2xs ${
-                        t.jenis_dokumen_id === 2 
-                          ? 'bg-rose-50/90 text-rose-600 border-rose-100' 
-                          : t.jenis_dokumen_id === 3
-                            ? 'bg-sky-100/80 text-sky-700 border-sky-200/60'
-                            : 'bg-emerald-50/90 text-emerald-600 border-emerald-100'
-                      }`}>
+                      {/* 🌟 BADGE DEN GAN WARNA SERAGAM BIRU SURAT TUGAS */}
+                      <span className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold uppercase tracking-wide border shadow-2xs bg-sky-100/80 text-sky-700 border-sky-200/60">
                         {t.jenis_dokumen_id === 2 ? '⚠️ Kerusakan' : t.jenis_dokumen_id === 3 ? '💼 Surat Tugas' : '🤝 Penyerahan'}
                       </span>
                     </div>
