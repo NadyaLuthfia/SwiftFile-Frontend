@@ -10,6 +10,8 @@ import Login from './pages/Login';
 import DraftDokumen from './pages/DraftDokument'; 
 import DraftPenyerahan from './pages/DraftPenyerahan';
 import DraftKerusakan from './pages/DraftKerusakan'; 
+import DraftTorBarang from './pages/DraftTorBarang';
+import DraftTorJasa from './pages/DraftTorJasa';
 import ManagementData from './pages/ManagementData';
 import DraftSuratTugas from './pages/DraftSuratTugas';
 import MonitoringData from './pages/MonitoringData';
@@ -22,7 +24,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         
-        {/* 🔑 1. RUTE KHUSUS LOGIN (Punya Halaman Sendiri) */}
+        {/* 1. RUTE LOGIN */}
         <Route 
           path="/login" 
           element={
@@ -38,14 +40,12 @@ function App() {
           } 
         />
 
-        {/* 🔒 2. PROTEKSI TOKEN JIKA BELUM LOGIN */}
+        {/* 2. PROTEKSI TOKEN JIKA BELUM LOGIN */}
         {!token ? (
-          // Jika tidak ada token dan coba akses rute apa pun, PAKSA pindah ke URL /login
           <Route path="*" element={<Navigate to="/login" replace />} />
         ) : (
-          /* JIKA SUDAH LOGIN, PEMBAGIAN RUTE BERDASARKAN ROLE */
           <>
-            {/* 👑 Kelompok Akses: MASTER ADMIN */}
+            {/* Kelompok Akses: MASTER ADMIN */}
             {role === 'master_admin' && (
               <>
                 <Route path="/" element={<Navigate to="/master-dashboard" replace />} />
@@ -55,6 +55,8 @@ function App() {
                 <Route path="/draft-surat-tugas" element={<DraftSuratTugas />} />
                 <Route path="/draft-penyerahan" element={<DraftPenyerahan />} />
                 <Route path="/draft-kerusakan" element={<DraftKerusakan />} /> 
+                <Route path="/draft-tor-barang" element={<DraftTorBarang />} />
+                <Route path="/draft-tor-jasa" element={<DraftTorJasa />} />
                 <Route path="/siap-cetak" element={<SiapCetak />} />
                 <Route path="/arsip-history" element={<ArsipHistory />} />
                 <Route path="/management-data" element={<ManagementData />} />
@@ -63,7 +65,7 @@ function App() {
               </>
             )}
 
-            {/* 👥 Kelompok Akses: ADMIN BIASA */}
+            {/* Kelompok Akses: ADMIN BIASA */}
             {role === 'admin' && (
               <>
                 <Route path="/" element={<Navigate to="/admin-dashboard" replace />} />
@@ -73,6 +75,8 @@ function App() {
                 <Route path="/draft-surat-tugas" element={<DraftSuratTugas />} />
                 <Route path="/draft-penyerahan" element={<DraftPenyerahan />} />
                 <Route path="/draft-kerusakan" element={<DraftKerusakan />} /> 
+                <Route path="/draft-tor-barang" element={<DraftTorBarang />} />
+                <Route path="/draft-tor-jasa" element={<DraftTorJasa />} />
                 <Route path="/siap-cetak" element={<SiapCetak />} />
                 <Route path="/arsip-history" element={<ArsipHistory />} />
                 <Route path="/management-data" element={<ManagementData />} />
@@ -81,7 +85,7 @@ function App() {
               </>
             )}
 
-            {/* 👤 Kelompok Akses: USER BIASA */}
+            {/* Kelompok Akses: USER BIASA */}
             {role === 'user' && (
               <>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -91,6 +95,8 @@ function App() {
                 <Route path="/draft-surat-tugas" element={<DraftSuratTugas />} />
                 <Route path="/draft-penyerahan" element={<DraftPenyerahan />} />
                 <Route path="/draft-kerusakan" element={<DraftKerusakan />} /> 
+                <Route path="/draft-tor-barang" element={<DraftTorBarang />} />
+                <Route path="/draft-tor-jasa" element={<DraftTorJasa />} />
                 <Route path="/siap-cetak" element={<SiapCetak />} />
                 <Route path="/arsip-history" element={<ArsipHistory />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />

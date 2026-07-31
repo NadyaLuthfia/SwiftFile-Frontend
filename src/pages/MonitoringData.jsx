@@ -1,15 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import axios from 'axios';
 
 function MonitoringData() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
   const [fileList, setFileList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('');
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState('');
+
+  // 🟢 STATE UNTUK PRINTING & HIGHLIGHT GLOW
+  const [printingId, setPrintingId] = useState(null);
+  const [activeHighlight, setActiveHighlight] = useState(null);
+  const highlightedRef = useRef(null);
 
   // STATE UNTUK POP-UP MODAL RINCIAN
   const [selectedFileForModal, setSelectedFileForModal] = useState(null);
@@ -29,7 +38,8 @@ function MonitoringData() {
       });
       const result = await response.json();
       if (response.ok && result.status === 'success') {
-        setFileList(result.data);
+        // Menyimpan data hasil fetch (30 data terbaru)
+        setFileList(result.data || []);
       }
     } catch (error) {
       console.error("Gagal memuat data monitoring:", error);
@@ -38,8 +48,33 @@ function MonitoringData() {
     }
   };
 
-  const handlePrintFisik = (filename) => {
-    alert(`🖨️ Mengirim perintah cetak ke mesin printer:\nDokumen: ${filename}`);
+  // 🚀 FUNGSI CETAK FISIK: GENERATE PDF & BUKA TAB BARU
+  const handlePrintFisik = async (id) => {
+    setPrintingId(id);
+    const token = localStorage.getItem('token');
+
+    try {
+      const response = await axios.post(`${BASE_URL}/siap-cetak/${id}/cetak-lagi`, {
+        copies: 1,
+        pages: 'All'
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.data && response.data.pdf_url) {
+        window.open(response.data.pdf_url, '_blank');
+      } else {
+        alert("🎉 Dokumen berhasil diproses, namun URL PDF tidak ditemukan.");
+      }
+    } catch (error) {
+      console.error("Gagal melakukan konversi PDF:", error);
+      alert("Terjadi kesalahan sistem saat mencoba mengonversi/mencetak dokumen.");
+    } finally {
+      setPrintingId(null);
+    }
   };
 
   const handleLihatFile = (file) => {
@@ -72,18 +107,81 @@ function MonitoringData() {
     fetchAllFilesForMonitoring();
   }, []);
 
-  // FILTERING SISI FRONTEND
-  const filteredFiles = fileList.filter((file) => {
-    const query = searchQuery.toLowerCase();
-    const matchNamaDokumen = file.nama_dokumen?.toLowerCase().includes(query);
-    const matchPembuat = file.nama_pembuat?.toLowerCase().includes(query);
-    const matchSearch = matchNamaDokumen || matchPembuat;
-    const matchRole = selectedRole === '' || file.user?.role === selectedRole;
-    
-    const sudahMasukArsip = file.foto_ttd && file.foto_ttd !== '';
+  // 🟢 DETEKSI PARAMETER HIGHLIGHT DARI DASHBOARD
+  useEffect(() => {
+    const paramHighlight = searchParams.get('highlight') || location.state?.highlightId;
+    const targetNomor = location.state?.nomorDokumen;
 
-    return matchSearch && matchRole && sudahMasukArsip;
-  });
+    if (paramHighlight || targetNomor) {
+      setActiveHighlight({
+        id: paramHighlight,
+        nomor: targetNomor
+      });
+    }
+  }, [location, searchParams]);
+
+  // 🟢 PENCARI SINGLE TARGET HIGHLIGHT
+  const targetHighlightId = useMemo(() => {
+    if (!activeHighlight || fileList.length === 0) return null;
+
+    const targetId = activeHighlight.id;
+    const targetNomor = activeHighlight.nomor ? String(activeHighlight.nomor).trim().toLowerCase() : '';
+
+    if (targetNomor) {
+      const matchNomor = fileList.find(f => 
+        (f.nomor_dokumen && String(f.nomor_dokumen).trim().toLowerCase() === targetNomor) ||
+        (f.nama_dokumen && f.nama_dokumen.toLowerCase().includes(targetNomor))
+      );
+      if (matchNomor) return matchNomor.id;
+    }
+
+    if (targetId) {
+      const matchId = fileList.find(f => String(f.id) === String(targetId));
+      if (matchId) return matchId.id;
+    }
+
+    return null;
+  }, [activeHighlight, fileList]);
+
+  // 🟢 OTOMATIS SCROLL KE FILE YANG HIGHLIGHT
+  useEffect(() => {
+    if (targetHighlightId && highlightedRef.current) {
+      setTimeout(() => {
+        highlightedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 400);
+    }
+  }, [targetHighlightId]);
+
+  // 🟢 MENGHILANGKAN GLOW JIKA KLIK DI MANA SAJA
+  useEffect(() => {
+    const handleRemoveHighlight = () => {
+      if (activeHighlight) {
+        setActiveHighlight(null);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      window.addEventListener('click', handleRemoveHighlight);
+    }, 400);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('click', handleRemoveHighlight);
+    };
+  }, [activeHighlight]);
+
+  // 🎯 FILTERING SISI FRONTEND (Menampilkan maks 30 file terbaru tanpa terpotong)
+  const filteredFiles = useMemo(() => {
+    return fileList.filter((file) => {
+      const query = searchQuery.toLowerCase();
+      const matchNamaDokumen = file.nama_dokumen?.toLowerCase().includes(query);
+      const matchPembuat = file.nama_pembuat?.toLowerCase().includes(query);
+      const matchSearch = matchNamaDokumen || matchPembuat;
+      const matchRole = selectedRole === '' || file.user?.role === selectedRole;
+
+      return matchSearch && matchRole;
+    }).slice(0, 30); // Memastikan maksimal 30 item terbaru yang dirender
+  }, [fileList, searchQuery, selectedRole]);
 
   // Deteksi Surat Tugas untuk Modal
   const isSuratTugas = selectedFileForModal && (
@@ -93,13 +191,12 @@ function MonitoringData() {
     selectedFileForModal.nama_dokumen?.toLowerCase().includes('tugas')
   );
 
-  // HELPER PINTAR: Mencari nilai field secara mendalam dengan prioritas kata kunci persis
+  // HELPER PINTAR UNTUK MENCARI PROPERTY DARI VARIABLE
   const findValueByKeywords = (obj, exactKeywords, partialKeywords = []) => {
     if (!obj || typeof obj !== 'object') return null;
 
     const ignoreKeys = ['id', 'user_id', 'template_id', 'created_at', 'updated_at', 'file_path', 'foto_ttd', 'nama_dokumen', 'nama_pembuat', 'role', 'status', 'nama_penerima', 'nama_penyerah', 'pihak_satu', 'pihak_dua'];
 
-    // 1. Cek Exact Match / Match Presisi Dulu
     for (const key of Object.keys(obj)) {
       const lowerKey = key.toLowerCase();
       if (ignoreKeys.includes(lowerKey)) continue;
@@ -114,7 +211,6 @@ function MonitoringData() {
       }
     }
 
-    // 2. Cek Partial Match jika tidak ada exact match
     if (partialKeywords.length > 0) {
       for (const key of Object.keys(obj)) {
         const lowerKey = key.toLowerCase();
@@ -131,7 +227,6 @@ function MonitoringData() {
       }
     }
 
-    // 3. Cari di sub-objek/relasi
     for (const key of Object.keys(obj)) {
       let val = obj[key];
       if (typeof val === 'string') {
@@ -151,7 +246,6 @@ function MonitoringData() {
     const namaDoc = file.nama_dokumen?.toLowerCase() || '';
     const templateId = String(file.template_id || file.template?.id || '');
 
-    // 1. SURAT TUGAS
     if (templateId === '3' || namaDoc.includes('tugas')) {
       const pekerja = findValueByKeywords(file, ['nama_pekerja', 'pekerja', 'nama_karyawan', 'petugas'], ['pekerja', 'karyawan', 'petugas']);
       const lokasi = findValueByKeywords(file, ['lokasi', 'lokasi_tugas', 'tempat', 'tujuan'], ['lokasi', 'tempat', 'tujuan', 'alamat']);
@@ -167,7 +261,6 @@ function MonitoringData() {
       }
     }
 
-    // 2. BA KERUSAKAN
     if (templateId === '2' || namaDoc.includes('kerusakan')) {
       const alat = findValueByKeywords(
         file, 
@@ -183,9 +276,7 @@ function MonitoringData() {
       }
     }
 
-    // 3. BA PENYERAHAN
     if (templateId === '1' || namaDoc.includes('penyerahan')) {
-      // Dibuat lebih spesifik memprioritaskan nama barang / item saja, mengabaikan nama orang
       const item = findValueByKeywords(
         file, 
         ['nama_barang', 'nama_item', 'item', 'barang', 'objek_penyerahan', 'jenis_barang'], 
@@ -200,7 +291,6 @@ function MonitoringData() {
       }
     }
 
-    // Fallback ID jika tidak ada barang/detail ditemukan
     return (
       <span className="text-[10px] text-slate-400 font-semibold">
         ID: #{file.id}
@@ -224,8 +314,9 @@ function MonitoringData() {
           <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-black text-slate-800 tracking-tight">
-                Monitoring <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">Semua File</span>
+                Monitoring <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">File Terbaru </span>
               </h1>
+              <p className="text-xs text-slate-400 mt-1 font-medium">Menampilkan maksimal 30 dokumen arsip riwayat pembuatan terbaru.</p>
             </div>
 
             {/* BAR PENCARIAN & FILTER ROLE */}
@@ -278,30 +369,52 @@ function MonitoringData() {
               {/* LIST CARD ROWS PER BERKAS */}
               <div className="space-y-3">
                 {filteredFiles.map((file) => {
+                  const isHighlighted = targetHighlightId !== null && file.id === targetHighlightId;
+
                   return (
                     <div 
                       key={file.id}
-                      className="bg-white border border-sky-200/80 rounded-2xl p-3.5 md:px-5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-md shadow-sky-100/40 hover:shadow-xl hover:shadow-sky-200/50 hover:border-sky-300 transform hover:scale-[1.01] hover:-translate-y-0.5 transition-all duration-300 ease-out"
+                      ref={isHighlighted ? highlightedRef : null}
+                      className={`rounded-2xl p-3.5 md:px-5 flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-500 ease-out transform ${
+                        isHighlighted 
+                          ? 'bg-emerald-50/50 border-2 border-emerald-400 ring-4 ring-emerald-300/60 shadow-xl shadow-emerald-200/80 scale-[1.015] animate-pulse' 
+                          : 'bg-white border border-sky-200/80 shadow-md shadow-sky-100/40 hover:shadow-xl hover:shadow-sky-200/50 hover:border-sky-300 hover:scale-[1.01] hover:-translate-y-0.5'
+                      }`}
                     >
                       {/* 1. DETAIL NAMA BERKAS */}
                       <div className="flex items-center gap-3.5 flex-1 min-w-0 w-full md:w-auto">
-                        <div className="bg-sky-50 text-sky-500 w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 border border-sky-100/80 shadow-xs">
+                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 border shadow-xs transition-colors ${
+                          isHighlighted ? 'bg-emerald-100 text-emerald-600 border-emerald-300' : 'bg-sky-50 text-sky-500 border-sky-100/80'
+                        }`}>
                           📄
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p 
-                            className="text-slate-800 font-bold hover:text-sky-600 transition-colors cursor-pointer text-xs truncate max-w-[320px]" 
-                            onClick={() => setSelectedFileForModal(file)}
-                            title={file.nama_dokumen}
-                          >
-                            {file.nama_dokumen}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p 
+                              className={`font-bold transition-colors cursor-pointer text-xs truncate max-w-[320px] ${
+                                isHighlighted ? 'text-emerald-900 font-extrabold' : 'text-slate-800 hover:text-sky-600'
+                              }`} 
+                              onClick={() => setSelectedFileForModal(file)}
+                              title={file.nama_dokumen}
+                            >
+                              {file.nama_dokumen}
+                            </p>
+
+                            {/* BADGE POP-UP GLOW HIJAU */}
+                            {isHighlighted && (
+                              <span className="text-[9px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-md uppercase tracking-wider animate-bounce shadow-xs">
+                                🟢 DITANDAI DARI DASHBOARD
+                              </span>
+                            )}
+                          </div>
                           
-                          {/* RINCIAN DINAMIS MENGGANTIKAN ID */}
+                          {/* RINCIAN DINAMIS */}
                           <div className="flex items-center gap-2 mt-1">
                             {renderDetailDynamic(file)}
 
-                            <span className="text-[10px] font-bold text-sky-600 bg-sky-50/90 border border-sky-100 px-2 py-0.5 rounded-lg flex items-center gap-1 shrink-0">
+                            <span className={`text-[10px] font-bold border px-2 py-0.5 rounded-lg flex items-center gap-1 shrink-0 ${
+                              isHighlighted ? 'bg-emerald-100/80 text-emerald-800 border-emerald-200' : 'bg-sky-50/90 text-sky-600 border-sky-100'
+                            }`}>
                               👤 {file.nama_pembuat}
                             </span>
                           </div>
@@ -318,18 +431,17 @@ function MonitoringData() {
                         </span>
                       </div>
 
-                      {/* 3. TINDAKAN (TOMBOL CETAK & NONAKTIF) */}
+                      {/* 3. TINDAKAN */}
                       <div className="shrink-0 flex items-center justify-end gap-2 w-52">
-                        {/* Tombol Cetak Fisik */}
                         <button
                           type="button"
-                          onClick={() => handlePrintFisik(file.nama_dokumen)}
-                          className="bg-slate-900 hover:bg-black text-white px-3.5 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-xs cursor-pointer whitespace-nowrap select-none active:scale-95"
+                          disabled={printingId === file.id}
+                          onClick={() => handlePrintFisik(file.id)}
+                          className="bg-slate-900 hover:bg-black text-white px-3.5 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-xs cursor-pointer whitespace-nowrap select-none active:scale-95 disabled:opacity-50"
                         >
-                          🖨️ CETAK FISIK
+                          {printingId === file.id ? 'Mengonversi PDF...' : '🖨️ CETAK FISIK'}
                         </button>
 
-                        {/* AKSI KHUSUS MASTER ADMIN: "Nonaktif" */}
                         {userRole === 'master_admin' && (
                           <button 
                             type="button"
@@ -358,7 +470,6 @@ function MonitoringData() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-sky-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             
-            {/* HEADER MODAL */}
             <div className="flex justify-between items-start border-b border-sky-100 pb-3">
               <div>
                 <span className="text-[10px] font-black bg-sky-50 text-sky-600 px-3 py-1 rounded-xl uppercase tracking-wider border border-sky-100">
@@ -377,7 +488,6 @@ function MonitoringData() {
               </button>
             </div>
 
-            {/* BODY MODAL */}
             <div className="text-xs space-y-2.5">
               <div className="grid grid-cols-3 bg-[#F4F8FC] p-3 rounded-2xl border border-sky-100/60">
                 <span className="text-slate-400 font-medium">ID Ref</span>
@@ -388,7 +498,6 @@ function MonitoringData() {
                 <span className="col-span-2 text-slate-800 font-bold">#{selectedFileForModal.template_id || '1'}</span>
               </div>
 
-              {/* Master File Dokumen */}
               <div className="space-y-2 pt-2 border-t border-sky-100">
                 <span className="text-slate-600 font-bold block text-[11px]">Master Berkas &amp; Dokumen:</span>
                 <div className="flex flex-wrap gap-2">
@@ -402,7 +511,6 @@ function MonitoringData() {
                 </div>
               </div>
 
-              {/* Bukti Fisik / Tanda Tangan */}
               {!isSuratTugas && (
                 <div className="space-y-1.5 pt-2 border-t border-sky-100">
                   <span className="text-slate-600 font-bold block text-[11px]">Preview Bukti Fisik TTD:</span>
@@ -431,7 +539,6 @@ function MonitoringData() {
               )}
             </div>
 
-            {/* FOOTER MODAL */}
             <div className="pt-2 flex items-center justify-end border-t border-sky-100">
               <button
                 type="button"

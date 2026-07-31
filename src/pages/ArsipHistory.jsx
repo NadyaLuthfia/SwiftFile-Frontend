@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import axios from 'axios'; 
 
@@ -34,7 +35,7 @@ const dapatkanValueSakti = (inputObj, targetKey) => {
 };
 
 // ================= SUB-KOMPONEN BARIS DOKUMEN (GRID ROW) =================
-function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, onBukaModal, activeTab }) {
+function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, onBukaModal, activeTab, isHighlighted, highlightedRef }) {
   // Pengecekan status apakah sedang di tab/halaman Aktif
   const isAktif = statusFilter === '1';
 
@@ -45,23 +46,45 @@ function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, 
   const namaPekerja = dapatkanValueSakti(file, 'PEKERJA') || dapatkanValueSakti(file, 'NAMA_PEKERJA') || dapatkanValueSakti(file, 'PETUGAS') || dapatkanValueSakti(file, 'NAMA_PETUGAS') || dapatkanValueSakti(file, 'NAMA');
   const lokasi = dapatkanValueSakti(file, 'LOKASI') || dapatkanValueSakti(file, 'TEMPAT') || dapatkanValueSakti(file, 'TUJUAN') || dapatkanValueSakti(file, 'LOKASI_PEKERJAAN') || dapatkanValueSakti(file, 'LOKASI_TUGAS');
 
+  // Variabel Khusus TOR
+  const pengadaan = dapatkanValueSakti(file, 'PENGADAAN') || dapatkanValueSakti(file, 'NAMA_DRAFT') || dapatkanValueSakti(file, 'NAMA_BARANG');
+  const pekerjaanJasa = dapatkanValueSakti(file, 'NAMA_PEKERJAAN') || dapatkanValueSakti(file, 'PEKERJAAN') || dapatkanValueSakti(file, 'KEGIATAN') || dapatkanValueSakti(file, 'NAMA_DRAFT');
+
   return (
     <div 
-      className="grid grid-cols-12 items-center px-6 py-3.5 bg-white hover:bg-sky-50/30 rounded-2xl border border-sky-100/80 hover:border-sky-300 shadow-xs hover:shadow-lg hover:shadow-sky-100/80 transition-all duration-300 transform hover:scale-[1.01] hover:-translate-y-0.5 group cursor-default"
+      ref={isHighlighted ? highlightedRef : null}
+      className={`grid grid-cols-12 items-center px-6 py-3.5 rounded-2xl transition-all duration-500 ease-out transform group cursor-default ${
+        isHighlighted 
+          ? 'bg-emerald-50/50 border-2 border-emerald-400 ring-4 ring-emerald-300/60 shadow-xl shadow-emerald-200/80 scale-[1.015] animate-pulse' 
+          : 'bg-white hover:bg-sky-50/30 border border-sky-100/80 hover:border-sky-300 shadow-xs hover:shadow-lg hover:shadow-sky-100/80 hover:scale-[1.01] hover:-translate-y-0.5'
+      }`}
     >
       {/* 1. INFORMASI BERKAS (COL SPAN 5) */}
       <div className="col-span-5 flex items-center gap-3.5">
-        <div className="bg-gradient-to-br from-sky-100/80 to-blue-50 text-sky-600 w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-2xs border border-sky-100 group-hover:scale-110 group-hover:shadow-md group-hover:shadow-sky-200/60 transition-all duration-300 shrink-0">
+        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 border transition-colors ${
+          isHighlighted ? 'bg-emerald-100 text-emerald-600 border-emerald-300' : 'bg-gradient-to-br from-sky-100/80 to-blue-50 text-sky-600 border-sky-100 group-hover:scale-110'
+        }`}>
           📄
         </div>
         <div className="min-w-0 pr-2">
-          <p 
-            className="text-slate-800 font-bold group-hover:text-sky-600 transition-colors cursor-pointer text-xs truncate" 
-            onClick={() => onBukaModal(file)}
-            title={file.nama_dokumen}
-          >
-            {file.nama_dokumen}
-          </p>
+          <div className="flex items-center gap-2">
+            <p 
+              className={`font-bold transition-colors cursor-pointer text-xs truncate ${
+                isHighlighted ? 'text-emerald-900 font-extrabold' : 'text-slate-800 group-hover:text-sky-600'
+              }`} 
+              onClick={() => onBukaModal(file)}
+              title={file.nama_dokumen}
+            >
+              {file.nama_dokumen}
+            </p>
+
+            {/* BADGE HIGHLIGHT DARI DASHBOARD */}
+            {isHighlighted && (
+              <span className="text-[9px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-md uppercase tracking-wider animate-bounce shadow-xs shrink-0">
+                🟢 DITANDAI DARI DASHBOARD
+              </span>
+            )}
+          </div>
           
           {/* INFORMASI DINAMIS BERDASARKAN DOKUMEN */}
           {activeTab === 'ba_penyerahan' && (
@@ -83,6 +106,18 @@ function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, 
               <span>📍 Lokasi: {lokasi || <span className="italic text-slate-400">[Tidak ada lokasi]</span>}</span>
             </p>
           )}
+
+          {activeTab === 'tor_barang' && (
+            <p className="text-[10px] text-indigo-600 font-semibold mt-0.5 flex items-center gap-1 truncate max-w-[320px]">
+              <span>📦 Pengadaan: {pengadaan || <span className="italic text-slate-400">[Tidak ada detail pengadaan]</span>}</span>
+            </p>
+          )}
+
+          {activeTab === 'tor_jasa' && (
+            <p className="text-[10px] text-teal-600 font-semibold mt-0.5 flex items-center gap-1 truncate max-w-[320px]">
+              <span>🛠️ Pekerjaan: {pekerjaanJasa || <span className="italic text-slate-400">[Tidak ada detail pekerjaan]</span>}</span>
+            </p>
+          )}
         </div>
       </div>
 
@@ -95,7 +130,7 @@ function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, 
             onClick={() => onCetakLagi(file.id, 1, 'All')} 
             className="bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-black text-white px-4 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all duration-300 shadow-2xs hover:shadow-md cursor-pointer whitespace-nowrap disabled:opacity-50 select-none active:scale-95 transform hover:-translate-y-0.5 flex items-center gap-1.5"
           >
-            {printingId === file.id ? 'Loading...' : '🖨️ CETAK FISIK'}
+            {printingId === file.id ? 'Mengonversi PDF...' : '🖨️ CETAK FISIK'}
           </button>
         ) : (
           <span className="text-[10px] font-extrabold text-rose-500 bg-rose-50 px-3 py-1 rounded-xl border border-rose-100 uppercase tracking-wider">
@@ -104,7 +139,7 @@ function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, 
         )}
       </div>
 
-      {/* 3. TOMBOL AKSI (COL SPAN 2) - HANYA TOMBOL STATUS */}
+      {/* 3. TOMBOL AKSI (COL SPAN 2) */}
       <div className="col-span-2 flex items-center justify-center">
         <button
           type="button"
@@ -127,6 +162,10 @@ function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, 
 
 // ================= KOMPONEN UTAMA =================
 function ArsipHistory() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
   const [antreanList, setAntreanList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -135,6 +174,10 @@ function ArsipHistory() {
   
   const [activeTab, setActiveTab] = useState('ba_penyerahan'); 
   const [statusFilter, setStatusFilter] = useState('1'); // '1' = Aktif, '0' = Nonaktif
+
+  // 🟢 STATE UNTUK HIGHLIGHT GLOW DARI DASHBOARD
+  const [activeHighlight, setActiveHighlight] = useState(null);
+  const highlightedRef = useRef(null);
 
   // STATE UNTUK MODAL REVIEW
   const [modalTerbuka, setModalTerbuka] = useState(false);
@@ -145,6 +188,87 @@ function ArsipHistory() {
   useEffect(() => {
     ambilDataHistory(statusFilter);
   }, [statusFilter]);
+
+  // 🟢 1. DETEKSI PARAMETER HIGHLIGHT DARI DASHBOARD
+  useEffect(() => {
+    const paramHighlight = searchParams.get('highlight') || location.state?.highlightId;
+    const targetNomor = location.state?.nomorDokumen;
+
+    if (paramHighlight || targetNomor) {
+      setActiveHighlight({
+        id: paramHighlight,
+        nomor: targetNomor
+      });
+    }
+  }, [location, searchParams]);
+
+  // 🟢 2. CARI DOKUMEN YANG COCOK UNTUK HIGHLIGHT
+  const targetHighlightItem = useMemo(() => {
+    if (!activeHighlight || antreanList.length === 0) return null;
+
+    const targetId = activeHighlight.id;
+    const targetNomor = activeHighlight.nomor ? String(activeHighlight.nomor).trim().toLowerCase() : '';
+
+    if (targetNomor) {
+      const matchNomor = antreanList.find(f => 
+        (f.nomor_dokumen && String(f.nomor_dokumen).trim().toLowerCase() === targetNomor) ||
+        (f.nama_dokumen && f.nama_dokumen.toLowerCase().includes(targetNomor))
+      );
+      if (matchNomor) return matchNomor;
+    }
+
+    if (targetId) {
+      const matchId = antreanList.find(f => String(f.id) === String(targetId));
+      if (matchId) return matchId;
+    }
+
+    return null;
+  }, [activeHighlight, antreanList]);
+
+  // 🟢 3. OTOMATIS SESUAIKAN TAB AKTIF BERDASARKAN DOKUMEN TERSEBUT
+  useEffect(() => {
+    if (targetHighlightItem) {
+      const gabunganTeks = `${targetHighlightItem.nama_dokumen || ''} ${targetHighlightItem.nama_arsip_display || ''}`.toLowerCase();
+      if (gabunganTeks.includes('penyerahan')) {
+        setActiveTab('ba_penyerahan');
+      } else if (gabunganTeks.includes('kerusakan')) {
+        setActiveTab('ba_kerusakan');
+      } else if (gabunganTeks.includes('tugas')) {
+        setActiveTab('surat_tugas');
+      } else if (gabunganTeks.includes('tor') && gabunganTeks.includes('jasa')) {
+        setActiveTab('tor_jasa');
+      } else if (gabunganTeks.includes('tor')) {
+        setActiveTab('tor_barang');
+      }
+    }
+  }, [targetHighlightItem]);
+
+  // 🟢 4. OTOMATIS SCROLL KE BARIS DOKUMEN YANG DI-GLOW
+  useEffect(() => {
+    if (targetHighlightItem && highlightedRef.current) {
+      setTimeout(() => {
+        highlightedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 400);
+    }
+  }, [targetHighlightItem, activeTab]);
+
+  // 🟢 5. KLIK DI MANA SAJA DI HALAMAN UNTUK MENGHILANGKAN GLOW
+  useEffect(() => {
+    const handleRemoveHighlight = () => {
+      if (activeHighlight) {
+        setActiveHighlight(null);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      window.addEventListener('click', handleRemoveHighlight);
+    }, 400);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('click', handleRemoveHighlight);
+    };
+  }, [activeHighlight]);
 
   const ambilDataHistory = (status = statusFilter) => {
     setLoading(true);
@@ -224,13 +348,17 @@ function ArsipHistory() {
         'Accept': 'application/json'
       }
     })
-    .then(() => {
-      alert(`🎉 Sukses! Berhasil dikirim ulang ke printer.`);
+    .then(res => {
+      if (res.data && res.data.pdf_url) {
+        window.open(res.data.pdf_url, '_blank');
+      } else {
+        alert("🎉 Dokumen berhasil dikonversi, namun URL PDF tidak ditemukan.");
+      }
       setPrintingId(null);
     })
     .catch(err => {
-      console.error("Gagal melakukan cetak ulang:", err);
-      alert("Terjadi kesalahan sistem saat mencoba mencetak ulang berkas.");
+      console.error("Gagal melakukan cetak ulang / konversi PDF:", err);
+      alert("Terjadi kesalahan sistem saat mencoba mencetak dokumen.");
       setPrintingId(null);
     });
   };
@@ -245,11 +373,13 @@ function ArsipHistory() {
   const cekFotoTTD = (item) => {
     if (!item) return null;
     const namaDokumen = (item.nama_dokumen || '').toLowerCase();
-    if (namaDokumen.includes('tugas')) return null;
+    // Surat Tugas dan TOR tidak memiliki foto TTD fisik
+    if (namaDokumen.includes('tugas') || namaDokumen.includes('tor')) return null;
 
     return item.foto_ttd || (item.dokumen_cetak && item.dokumen_cetak.foto_ttd) || null;
   };
 
+  // HITUNG JUMLAH PER KATEGORI TAB
   const totalPenyerahan = dataTerfilter.filter(item => {
     const teks = `${item.nama_dokumen || ''} ${item.nama_arsip_display || ''}`.toLowerCase();
     return teks.includes('penyerahan');
@@ -265,11 +395,24 @@ function ArsipHistory() {
     return teks.includes('tugas');
   }).length;
 
+  const totalTorBarang = dataTerfilter.filter(item => {
+    const teks = `${item.nama_dokumen || ''} ${item.nama_arsip_display || ''}`.toLowerCase();
+    return teks.includes('tor') && (teks.includes('barang') || !teks.includes('jasa'));
+  }).length;
+
+  const totalTorJasa = dataTerfilter.filter(item => {
+    const teks = `${item.nama_dokumen || ''} ${item.nama_arsip_display || ''}`.toLowerCase();
+    return teks.includes('tor') && teks.includes('jasa');
+  }).length;
+
+  // TAMPILKAN DATA BERDASARKAN TAB YANG AKTIF
   const dataTampil = dataTerfilter.filter(item => {
     const gabunganTeks = `${item.nama_dokumen || ''} ${item.nama_arsip_display || ''}`.toLowerCase();
     if (activeTab === 'ba_penyerahan') return gabunganTeks.includes('penyerahan');
     if (activeTab === 'ba_kerusakan') return gabunganTeks.includes('kerusakan');
     if (activeTab === 'surat_tugas') return gabunganTeks.includes('tugas');
+    if (activeTab === 'tor_barang') return gabunganTeks.includes('tor') && (gabunganTeks.includes('barang') || !gabunganTeks.includes('jasa'));
+    if (activeTab === 'tor_jasa') return gabunganTeks.includes('tor') && gabunganTeks.includes('jasa');
     return true; 
   });
 
@@ -300,10 +443,10 @@ function ArsipHistory() {
           </section>
 
           {/* FILTER BAR & SEARCH CONTROLLER */}
-          <section className="bg-white p-3.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <section className="bg-white p-3.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
             
             {/* TAB KATEGORI */}
-            <div className="flex items-center gap-1.5 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60">
+            <div className="flex flex-wrap items-center gap-1.5 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60">
               <button
                 type="button"
                 onClick={() => setActiveTab('ba_penyerahan')}
@@ -339,10 +482,34 @@ function ArsipHistory() {
               >
                 💼 Surat Tugas ({totalSuratTugas})
               </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('tor_barang')}
+                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer transform active:scale-95 ${
+                  activeTab === 'tor_barang' 
+                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.03]' 
+                    : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
+                }`}
+              >
+                📦 TOR Barang ({totalTorBarang})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('tor_jasa')}
+                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer transform active:scale-95 ${
+                  activeTab === 'tor_jasa' 
+                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.03]' 
+                    : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
+                }`}
+              >
+                🛠️ TOR Jasa ({totalTorJasa})
+              </button>
             </div>
 
             {/* KONTROL KANAN */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto justify-end">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto justify-end">
               
               {/* TOMBOL TOGGLE HALAMAN AKTIF / NONAKTIF */}
               <button 
@@ -395,18 +562,24 @@ function ArsipHistory() {
 
               {/* LIST FRAME ARSIP */}
               <div className="space-y-2.5">
-                {dataTampil.map(file => (
-                  <ArsipRow 
-                    key={file.id}
-                    file={file}
-                    statusFilter={statusFilter}
-                    printingId={printingId}
-                    onCetakLagi={handleCetakLagi}
-                    onToggleAktif={handleToggleAktif}
-                    onBukaModal={bukaModalDetail}
-                    activeTab={activeTab}
-                  />
-                ))}
+                {dataTampil.map(file => {
+                  const isHighlighted = targetHighlightItem !== null && file.id === targetHighlightItem.id;
+
+                  return (
+                    <ArsipRow 
+                      key={file.id}
+                      file={file}
+                      statusFilter={statusFilter}
+                      printingId={printingId}
+                      onCetakLagi={handleCetakLagi}
+                      onToggleAktif={handleToggleAktif}
+                      onBukaModal={bukaModalDetail}
+                      activeTab={activeTab}
+                      isHighlighted={isHighlighted}
+                      highlightedRef={isHighlighted ? highlightedRef : null}
+                    />
+                  );
+                })}
               </div>
 
             </div>

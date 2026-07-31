@@ -1,27 +1,50 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; 
+import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 
 function DashboardMasterAdmin() {
   const [currentDate, setCurrentDate] = useState('📅 Menghitung tanggal...');
   const [userRole, setUserRole] = useState('');
+  const [userName, setUserName] = useState('');
   const navigate = useNavigate(); 
 
-  // CONFIG: Menggunakan Localhost API Laravel
   const BASE_URL = 'http://localhost:8000/api';
 
-  // 1. STATE STATS (File Template & Total Arsip Sah)
+  // 1. STATE STATS (Dibuat 3 Box)
   const [stats, setStats] = useState([
     { label: 'File Template', val: 0, unit: 'File', route: '/file-template' },
-    { label: 'Total Arsip Sah', val: 0, unit: 'Dokumen', route: '/arsip-history' }
+    { label: 'Arsip & History', val: 0, unit: 'Dokumen', route: '/arsip-history' },
+    { label: 'Total Dokumen Keseluruhan', val: 0, unit: 'Dokumen', route: '/monitoring-data' }
   ]);
 
-  // 2. STATE RINGKASAN TEMPLATE & AKTIVITAS TERAKHIR
   const [templateActivities, setTemplateActivities] = useState([]);
   const [loadingActivities, setLoadingActivities] = useState(true);
 
-  // Ambil data statistik 2 kartu atas
-  const fetchDashboardStats = async () => {
+  const fetchUserProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const res = await fetch(`${BASE_URL}/user`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (res.ok) {
+        const userData = await res.json();
+        if (userData?.karyawan?.nama_lengkap) {
+          setUserName(userData.karyawan.nama_lengkap);
+        }
+      }
+    } catch (err) {
+      console.error("Gagal mengambil nama lengkap karyawan:", err);
+    }
+  };
+
+  const fetchDashboardData = async () => {
+    setLoadingActivities(true);
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${BASE_URL}/dashboard/stats`, {
@@ -34,83 +57,44 @@ function DashboardMasterAdmin() {
 
       const data = await response.json();
 
-      if (response.ok && data.success && data.stats) {
-        setStats([
-          { label: 'File Template', val: data.stats.total_templates ?? 0, unit: 'File', route: '/file-template' },
-          { label: 'Total Arsip Sah', val: data.stats.total_arsip ?? 0, unit: 'Dokumen', route: '/arsip-history' }
-        ]);
-      }
-    } catch (error) {
-      console.error("Gagal mengambil data statistik:", error);
-    }
-  };
-
-  // Ambil data aktivitas template terakhir
-  const fetchTemplateActivities = async () => {
-    setLoadingActivities(true);
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${BASE_URL}/dashboard/template-summary`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
+      if (response.ok && data.success) {
+        if (data.stats) {
+          setStats([
+            { label: 'File Template', val: data.stats.total_templates ?? 0, unit: 'File', route: '/file-template' },
+            { label: 'Arsip & History', val: data.stats.total_arsip ?? 0, unit: 'Dokumen', route: '/arsip-history' },
+            { label: 'Total Dokumen', val: data.stats.total_dokumen_tahun ?? 0, unit: 'Dokumen', route: '/monitoring-data' }
+          ]);
         }
-      });
 
-      const resResult = await response.json();
+        if (Array.isArray(data.rekap)) {
+          const mappedActivities = data.rekap.map((item) => {
+            const hasLastDoc = item.nomor_terakhir && item.nomor_terakhir !== 'Belum ada';
 
-      if (response.ok && resResult.status === 'success') {
-        setTemplateActivities(resResult.data);
-      } else {
-        // Mock data otomatis jika backend belum siap
-        setTemplateActivities([
-          {
-            id: 1,
-            nama_template: 'BA Kerusakan Barang',
-            kode_template: 'BA-KER',
-            total_dibuat: 18,
-            dokumen_terakhir: {
-              id_dokumen: 101,
-              nama_dokumen: 'Berita Acara Kerusakan Laptop Asus Unit IT',
-              nomor_dokumen: 'BA-KER/2026/018',
-              dikerjakan_oleh: 'Bayu',
-              waktu_dibuat: '21 Juli 2026, 09:15 WIB',
-              file_url: 'http://localhost:8000/storage/dokumen/ba-ker-018.pdf'
-            }
-          },
-          {
-            id: 2,
-            nama_template: 'BA Penyerahan Asset',
-            kode_template: 'BA-NYERAH',
-            total_dibuat: 24,
-            dokumen_terakhir: {
-              id_dokumen: 102,
-              nama_dokumen: 'Penyerahan Kendaraan Operasional Avanza',
-              nomor_dokumen: 'BA-PEN/2026/024',
-              dikerjakan_oleh: 'Siti Sarah',
-              waktu_dibuat: '20 Juli 2026, 14:30 WIB',
-              file_url: ''
-            }
-          },
-          {
-            id: 3,
-            nama_template: 'Surat Tugas Operasional',
-            kode_template: 'ST-OPS',
-            total_dibuat: 41,
-            dokumen_terakhir: {
-              id_dokumen: 103,
-              nama_dokumen: 'Surat Tugas Inspeksi Kelapangan Balikpapan',
-              nomor_dokumen: 'ST/2026/041',
-              dikerjakan_oleh: 'Rian Hidayat',
-              waktu_dibuat: '19 Juli 2026, 11:00 WIB',
-              file_url: ''
-            }
-          }
-        ]);
+            const words = (item.jenis_file || 'DOC').split(' ');
+            const generatedCode = words.length > 1 
+              ? `${words[0].substring(0, 2).toUpperCase()}-${words[1].substring(0, 3).toUpperCase()}`
+              : words[0].substring(0, 4).toUpperCase();
+
+            return {
+              id: item.id,
+              nama_template: item.jenis_file,
+              kode_template: generatedCode,
+              total_dibuat: item.total_dicetak ?? 0,
+              dokumen_terakhir: hasLastDoc ? {
+                id_dokumen: item.id,
+                nama_dokumen: item.jenis_file,
+                nomor_dokumen: item.nomor_terakhir,
+                dikerjakan_oleh: item.pembuat ?? '-',
+                waktu_dibuat: item.tanggal_terakhir ?? '-',
+              } : null
+            };
+          });
+
+          setTemplateActivities(mappedActivities);
+        }
       }
     } catch (error) {
-      console.error("Gagal mengambil data ringkasan template:", error);
+      console.error("Gagal mengambil data dashboard:", error);
     } finally {
       setLoadingActivities(false);
     }
@@ -146,15 +130,14 @@ function DashboardMasterAdmin() {
     const tanggalSekarang = new Date().toLocaleDateString('id-ID', opsi);
     setCurrentDate(`🔹 ${tanggalSekarang}`);
 
-    fetchDashboardStats();
-    fetchTemplateActivities();
+    fetchUserProfile();
+    fetchDashboardData();
   }, []);
 
-  // FUNGSI NAVIGASI LANGSUNG KE HALAMAN ARSIP & MEMBAWA ID/NOMOR FILE
-  const handleGoToArsip = (dokumen) => {
+  const handleGoToMonitoring = (dokumen) => {
     if (!dokumen) return;
     
-    navigate(`/arsip-history?highlight=${dokumen.id_dokumen}`, {
+    navigate(`/monitoring-data?highlight=${dokumen.id_dokumen}`, {
       state: { 
         highlightId: dokumen.id_dokumen,
         nomorDokumen: dokumen.nomor_dokumen 
@@ -162,7 +145,8 @@ function DashboardMasterAdmin() {
     });
   };
 
-  const statIcons = ['📁', '✨'];
+  // 🟢 3 Ikon untuk masing-masing Box
+  const statIcons = ['📁', '✨', '📄'];
 
   return (
     <div 
@@ -176,11 +160,10 @@ function DashboardMasterAdmin() {
       <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full min-w-0 custom-scrollbar">
         <div className="w-full max-w-7xl mx-auto space-y-8">
           
-          {/* Header Area */}
           <header className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-black text-slate-800 tracking-tight mt-0.5">
-                Halaman <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">Statistik & Monitoring</span>
+                Selamat Datang, <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">{userName || 'Master Admin'}</span> 👋
               </h1>
             </div>
 
@@ -191,8 +174,8 @@ function DashboardMasterAdmin() {
             </div>
           </header>
 
-          {/* 📊 STATISTIK SECTION */}
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* 📊 STATISTIK SECTION (Menjadi 3 Kolom) */}
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {stats.map((item, index) => (
               <div 
                 key={index} 
@@ -222,7 +205,7 @@ function DashboardMasterAdmin() {
               <div>
                 <h3 className="text-lg font-bold text-slate-800">Aktivitas & Ringkasan Template Dokumen</h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Statistik penggunaan template. Klik pada kotak dokumen untuk menuju ke <span className="text-sky-600 font-bold">Halaman Arsip</span>.
+                  Statistik penggunaan template. Klik pada kotak dokumen untuk menuju ke <span className="text-sky-600 font-bold">Monitoring Data</span>.
                 </p>
               </div>
               
@@ -248,7 +231,6 @@ function DashboardMasterAdmin() {
                     key={tpl.id} 
                     className="bg-[#F4F8FC] p-5 rounded-2xl border border-sky-100 flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:bg-white hover:shadow-md hover:border-sky-200"
                   >
-                    {/* Bagian Kiri: Info Template & Total Dibuat */}
                     <div className="flex items-start space-x-4 min-w-[240px]">
                       <div className="h-12 w-12 bg-white text-sky-600 rounded-2xl flex items-center justify-center text-2xl border border-sky-100 shadow-xs flex-shrink-0">
                         📑
@@ -266,16 +248,15 @@ function DashboardMasterAdmin() {
                       </div>
                     </div>
 
-                    {/* Bagian Tengah: Detail Berkas (DENGAN ANIMASI ZOOM & PRESS POPPING EFFECT) */}
                     {tpl.dokumen_terakhir ? (
                       <div 
-                        onClick={() => handleGoToArsip(tpl.dokumen_terakhir)}
-                        title="📂 Klik untuk melihat & menandai dokumen ini di Halaman Arsip Sah"
+                        onClick={() => handleGoToMonitoring(tpl.dokumen_terakhir)}
+                        title="📊 Klik untuk melihat & menandai dokumen ini di Halaman Monitoring Data"
                         className="flex-1 bg-white p-3.5 rounded-xl border border-sky-100 space-y-1.5 shadow-2xs cursor-pointer transform transition-all duration-300 hover:scale-[1.025] hover:-translate-y-0.5 hover:shadow-lg hover:shadow-sky-100/80 hover:border-sky-400 hover:ring-2 hover:ring-sky-100/80 active:scale-95 active:translate-y-0 group select-none"
                       >
                         <div className="flex justify-between items-center text-[10px] text-slate-400 font-semibold border-b border-sky-50 pb-1">
                           <span className="uppercase text-sky-600 font-extrabold tracking-wider group-hover:text-blue-600 flex items-center gap-1 transition-colors">
-                            Pengerjaan Ke-{tpl.total_dibuat} (Terakhir) • 📂 Lihat di Arsip
+                            Pengerjaan Ke-{tpl.total_dibuat} (Terakhir) • 📊 Lihat di Monitoring
                           </span>
                           <span>🕒 {tpl.dokumen_terakhir.waktu_dibuat}</span>
                         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar'; 
 import axios from 'axios'; 
@@ -21,8 +21,10 @@ function DraftPenyerahan() {
   const [loadingDraft, setLoadingDraft] = useState(false); 
   const [loadingSelesai, setLoadingSelesai] = useState(false); 
 
-  // State Preview Foto di Frontend
+  // State khusus penampung array file foto & preview
+  const [photoFiles, setPhotoFiles] = useState([]);
   const [filePreviews, setFilePreviews] = useState({});
+  const filePreviewsRef = useRef({});
 
   // State untuk Tabel Barang / Item Dokumen
   const [dokumen_item, setDokumenItem] = useState([]);
@@ -37,50 +39,18 @@ function DraftPenyerahan() {
   const [showPenyerahDropdown, setShowPenyerahDropdown] = useState(false);
   const [showPenerimaDropdown, setShowPenerimaDropdown] = useState(false);
 
-  useEffect(() => {
-    muatDataKaryawan(); 
-
-    if (draftIdParam) {
-      ambilDetailDraft(draftIdParam);
-    } else if (templateIdParam) {
-      setCurrentTemplateId(templateIdParam);
-      ambilVariabelTemplate(templateIdParam);
-    }
-  }, [templateIdParam, draftIdParam]);
-
-  const ambilDetailDraft = (draftId) => {
-    setLoadingFetch(true);
+  const muatDataKaryawan = useCallback(() => {
     const token = localStorage.getItem('token');
-
-    axios.get(`http://localhost:8000/api/drafts/${draftId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      }
+    axios.get('http://localhost:8000/api/karyawan', {
+      headers: { 'Authorization': `Bearer ${token}` }
     })
-      .then(res => {
-        const draftData = res.data.data;
-        setNamaDraft(draftData.nama_draft);
-        setCurrentTemplateId(draftData.template_id);
+    .then(res => {
+      setKaryawanList(res.data.data || []);
+    })
+    .catch(err => console.error("Gagal memuat data karyawan:", err));
+  }, []);
 
-        let dataInputSebelumnya = draftData.data_input;
-        if (typeof dataInputSebelumnya === 'string') {
-          dataInputSebelumnya = JSON.parse(dataInputSebelumnya);
-        }
-
-        if (draftData.items) {
-          setDokumenItem(draftData.items);
-        }
-
-        ambilVariabelTemplate(draftData.template_id, dataInputSebelumnya);
-      })
-      .catch(err => {
-        console.error("Gagal memuat detail draft:", err);
-        setLoadingFetch(false);
-      });
-  };
-
-  const ambilVariabelTemplate = (idTemplate, dataLama = null) => {
+  const ambilVariabelTemplate = useCallback((idTemplate, dataLama = null) => {
     setLoadingFetch(true);
     const token = localStorage.getItem('token');
 
@@ -116,6 +86,8 @@ function DraftPenyerahan() {
           const dd = String(dataLama.tanggal || '').padStart(2, '0');
           
           setCalendarDate(`${yyyy}-${mm}-${dd}`);
+          setFormData(initialFormState);
+          setLoadingFetch(false);
         } else {
           listVariabel.forEach(variable => {
             initialFormState[variable] = ''; 
@@ -137,46 +109,83 @@ function DraftPenyerahan() {
 
           setCalendarDate(tglString);
           setNamaDraft(`${namaTemplate} - ${hariIni.getDate()}/${hariIni.getMonth() + 1}/${yyyy}`);
+
+          axios.get('http://localhost:8000/api/next-counter', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            }
+          })
+          .then(counterRes => {
+            const nextNo = String(counterRes.data.next_counter || 1).padStart(3, '0');
+            initialFormState['no'] = nextNo; 
+            setFormData(initialFormState);
+            setLoadingFetch(false);
+          })
+          .catch(err => {
+            console.error("Gagal mengambil counter live, memakai data lokal:", err);
+            if (!initialFormState['no']) {
+              initialFormState['no'] = '001';
+            }
+            setFormData(initialFormState);
+            setLoadingFetch(false);
+          });
         }
-
-        axios.get('http://localhost:8000/api/next-counter', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
-        })
-        .then(counterRes => {
-          const nextNo = String(counterRes.data.next_counter || 1).padStart(3, '0');
-          initialFormState['no'] = nextNo; 
-          setFormData(initialFormState);
-          setLoadingFetch(false);
-        })
-        .catch(err => {
-          console.error("Gagal mengambil counter live, memakai data lokal:", err);
-          if (!initialFormState['no']) {
-            initialFormState['no'] = '001';
-          }
-          setFormData(initialFormState);
-          setLoadingFetch(false);
-        });
-
       })
       .catch(err => {
         console.error("Gagal men-scan template:", err);
         setLoadingFetch(false);
       });
-  };
+  }, []);
 
-  const muatDataKaryawan = () => {
+  const ambilDetailDraft = useCallback((draftId) => {
+    setLoadingFetch(true);
     const token = localStorage.getItem('token');
-    axios.get('http://localhost:8000/api/karyawan', {
-      headers: { 'Authorization': `Bearer ${token}` }
+
+    axios.get(`http://localhost:8000/api/drafts/${draftId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      }
     })
-    .then(res => {
-      setKaryawanList(res.data.data || []);
-    })
-    .catch(err => console.error("Gagal memuat data karyawan:", err));
-  };
+      .then(res => {
+        const draftData = res.data.data;
+        setNamaDraft(draftData.nama_draft);
+        setCurrentTemplateId(draftData.template_id);
+
+        let dataInputSebelumnya = draftData.data_input;
+        if (typeof dataInputSebelumnya === 'string') {
+          dataInputSebelumnya = JSON.parse(dataInputSebelumnya);
+        }
+
+        if (draftData.items) {
+          setDokumenItem(draftData.items);
+        }
+
+        ambilVariabelTemplate(draftData.template_id, dataInputSebelumnya);
+      })
+      .catch(err => {
+        console.error("Gagal memuat detail draft:", err);
+        setLoadingFetch(false);
+      });
+  }, [ambilVariabelTemplate]);
+
+  useEffect(() => {
+    muatDataKaryawan(); 
+
+    if (draftIdParam) {
+      ambilDetailDraft(draftIdParam);
+    } else if (templateIdParam) {
+      setCurrentTemplateId(templateIdParam);
+      ambilVariabelTemplate(templateIdParam);
+    }
+
+    return () => {
+      Object.values(filePreviewsRef.current).forEach(url => {
+        if (url) URL.revokeObjectURL(url);
+      });
+    };
+  }, [templateIdParam, draftIdParam, muatDataKaryawan, ambilDetailDraft]);
 
   const handleCalendarChange = (e) => {
     const value = e.target.value; 
@@ -235,14 +244,46 @@ function DraftPenyerahan() {
     }
   };
 
-  const handleFileChange = (e, variableName) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  // MANAJEMEN FOTO DINAMIS
+  const updatePhotosState = (updatedList) => {
+    Object.values(filePreviewsRef.current).forEach(url => {
+      if (url) URL.revokeObjectURL(url);
+    });
 
-    setFormData(prev => ({ ...prev, [variableName]: file }));
+    const newPreviews = {};
+    const newFormData = { ...formData };
 
-    const previewUrl = URL.createObjectURL(file);
-    setFilePreviews(prev => ({ ...prev, [variableName]: previewUrl }));
+    Object.keys(newFormData).forEach(key => {
+      if (key.startsWith('foto_')) {
+        delete newFormData[key];
+      }
+    });
+
+    updatedList.forEach((file, index) => {
+      const varName = `foto_${index + 1}`;
+      newFormData[varName] = file;
+      newPreviews[varName] = URL.createObjectURL(file);
+    });
+
+    filePreviewsRef.current = newPreviews;
+    setPhotoFiles(updatedList);
+    setFilePreviews(newPreviews);
+    setFormData(newFormData);
+  };
+
+  const handleMultipleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    const updatedList = [...photoFiles, ...files];
+    updatePhotosState(updatedList);
+
+    e.target.value = '';
+  };
+
+  const handleRemovePhoto = (indexToRemove) => {
+    const updatedList = photoFiles.filter((_, index) => index !== indexToRemove);
+    updatePhotosState(updatedList);
   };
 
   const pilihKaryawan = (karyawan, tipeVariable) => {
@@ -267,26 +308,35 @@ function DraftPenyerahan() {
     }
   };
 
+  // =========================================================================
+  // 🔥 PERBAIKAN UTAMA DI SINI (PENYEBABB FOTO GAK KEBACA BERHASIL DIPERBAIKI):
+  // =========================================================================
   const generateMultipartData = (isCetakLangsung = false) => {
     const data = new FormData();
     data.append('template_id', currentTemplateId);
     data.append('nama_dokumen', namaDraft);
     data.append('nama_draft', namaDraft);
 
+    // 1. Masukkan semua variabel teks biasa
     Object.keys(formData).forEach(key => {
       const item = formData[key];
-      if (item instanceof File) {
-        data.append(key, item);
-      } else {
+      if (!(item instanceof File)) {
         data.append(`variables[${key}]`, item);
         data.append(`isian[${key}]`, item); 
       }
     });
 
+    // 2. KUNCI UTAMA: Masukkan semua file gambar ke key 'foto[]'
+    if (photoFiles && photoFiles.length > 0) {
+      photoFiles.forEach(file => {
+        data.append('foto[]', file);
+      });
+    }
+
     return data;
   };
 
-  // 1. SIMPAN DRAFT (LANGSUNG NAVIGASI TANPA SWAL/POP-UP)
+  // 1. SIMPAN DRAFT
   const handleSaveDraft = (e) => {
     e.preventDefault();
     setLoadingDraft(true);
@@ -322,7 +372,7 @@ function DraftPenyerahan() {
     });
   };
 
-  // 2. SELESAI & KIRIM (LANGSUNG NAVIGASI TANPA SWAL/POP-UP)
+  // 2. SELESAI & KIRIM
   const handleSelesai = (e) => {
     e.preventDefault();
     setLoadingSelesai(true);
@@ -359,9 +409,7 @@ function DraftPenyerahan() {
     return text.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
-  // =========================================================================
   // LIVE PREVIEW DENGAN SKEMA WARNA SKY BLUE
-  // =========================================================================
   const renderLivePreview = () => {
     if (!textContent) {
       return <p className="text-slate-400 italic text-center py-10">Memuat teks preview...</p>;
@@ -375,7 +423,7 @@ function DraftPenyerahan() {
       if (variable.startsWith('foto') || variable === 'foto_tunggal') {
         const filePreview = filePreviews[variable];
         const replacementPhoto = filePreview 
-          ? `<img src="${filePreview}" class="max-w-[120px] max-h-[60px] object-contain rounded-xl border border-sky-100 p-1 bg-white my-1 inline-block" />`
+          ? `<img src="${filePreview}" class="max-w-[140px] max-h-[100px] object-cover rounded-2xl border border-sky-200 my-1.5 shadow-xs inline-block" />`
           : `<span class="text-sky-600 font-bold text-[11px]">[Foto ${formatLabel(variable)}]</span>`;
         processedHTML = processedHTML.replaceAll(`\${${variable}}`, replacementPhoto);
         return;
@@ -489,6 +537,7 @@ function DraftPenyerahan() {
                         v !== 'tahun' && 
                         v !== 'tanggal' && 
                         v !== 'hari' &&
+                        !v.startsWith('foto_') &&
                         v !== 'foto_tunggal' &&
                         !v.startsWith('foto3_') &&
                         !v.startsWith('foto_grid')
@@ -496,50 +545,31 @@ function DraftPenyerahan() {
                       .map((variableName) => {
                         const isPenyerah = variableName === 'nama_penyerah';
                         const isPenerima = variableName === 'nama_penerima';
-                        const isPhoto = variableName.startsWith('foto_');
                         
                         return (
-                          <div key={variableName} className={`flex flex-col gap-1.5 ${isPenyerah || isPenerima ? 'relative' : ''} ${isPhoto ? 'md:col-span-2' : ''}`}>
+                          <div key={variableName} className={`flex flex-col gap-1.5 ${isPenyerah || isPenerima ? 'relative' : ''}`}>
                             <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
                               {formatLabel(variableName)} <span className="text-slate-400 font-mono text-[10px] font-normal">({variableName})</span>
                             </label>
                             
-                            {isPhoto ? (
-                              <div className="flex items-center gap-4 border border-sky-100/80 rounded-2xl p-3 bg-[#F4F8FC]/50 hover:border-sky-300 transition-all">
-                                <input 
-                                  type="file" 
-                                  accept="image/*"
-                                  onChange={(e) => handleFileChange(e, variableName)}
-                                  className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer flex-1"
-                                />
-                                {filePreviews[variableName] && (
-                                  <img 
-                                    src={filePreviews[variableName]} 
-                                    alt="Mini Preview" 
-                                    className="w-16 h-12 object-cover rounded-xl border border-sky-100 shadow-xs"
-                                  />
-                                )}
-                              </div>
-                            ) : (
-                              <input 
-                                type="text" 
-                                name={variableName} 
-                                value={formData[variableName] || ''} 
-                                onChange={handleChange} 
-                                onFocus={() => {
-                                  if (isPenyerah && formData.nama_penyerah) setShowPenyerahDropdown(true);
-                                  if (isPenerima && formData.nama_penerima) setShowPenerimaDropdown(true);
-                                }}
-                                onBlur={() => {
-                                  setTimeout(() => {
-                                    if (isPenyerah) setShowPenyerahDropdown(false);
-                                    if (isPenerima) setShowPenerimaDropdown(false);
-                                  }, 200);
-                                }}
-                                className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all" 
-                                required 
-                              />
-                            )}
+                            <input 
+                              type="text" 
+                              name={variableName} 
+                              value={formData[variableName] || ''} 
+                              onChange={handleChange} 
+                              onFocus={() => {
+                                if (isPenyerah && formData.nama_penyerah) setShowPenyerahDropdown(true);
+                                if (isPenerima && formData.nama_penerima) setShowPenerimaDropdown(true);
+                              }}
+                              onBlur={() => {
+                                setTimeout(() => {
+                                  if (isPenyerah) setShowPenyerahDropdown(false);
+                                  if (isPenerima) setShowPenerimaDropdown(false);
+                                }, 200);
+                              }}
+                              className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all" 
+                              required 
+                            />
 
                             {isPenyerah && showPenyerahDropdown && filteredPenyerah.length > 0 && (
                               <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
@@ -564,6 +594,63 @@ function DraftPenyerahan() {
                         );
                       })}
                   </div>
+
+                  {/* SECTION UPLOAD FOTO MULTIPLE BISA HAPUS & TAMBAH 1 PER 1 */}
+                  {fields.some(v => v.startsWith('foto_')) && (
+                    <div className="md:col-span-2 flex flex-col gap-1.5 border-t border-sky-100 pt-4">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
+                          Upload Foto Dokumentasi <span className="text-slate-400 font-normal lowercase">(Bisa pilih banyak & nambah 1 per 1)</span>
+                        </label>
+                        <span className="text-xs font-bold text-sky-600">
+                          {photoFiles.length} foto terpilih
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-4 border border-sky-100/80 rounded-2xl p-4 bg-[#F4F8FC]/50 hover:border-sky-300 transition-all">
+                        <input 
+                          type="file" 
+                          accept="image/*"
+                          multiple
+                          onChange={handleMultipleFileChange}
+                          className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer flex-1"
+                        />
+
+                        {/* PREVIEW FOTO + TOMBOL HAPUS (X) */}
+                        {photoFiles.length > 0 && (
+                          <div className="flex flex-wrap gap-3 mt-2">
+                            {photoFiles.map((file, index) => {
+                              const key = `foto_${index + 1}`;
+                              const previewUrl = filePreviews[key];
+
+                              return (
+                                <div key={index} className="relative group w-20 h-20">
+                                  <img 
+                                    src={previewUrl} 
+                                    alt={`Preview ${key}`} 
+                                    className="w-full h-full object-cover rounded-xl border border-sky-200 shadow-xs"
+                                  />
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemovePhoto(index)}
+                                    title="Hapus foto ini"
+                                    className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md transition-all cursor-pointer transform hover:scale-110"
+                                  >
+                                    ✕
+                                  </button>
+
+                                  <span className="absolute bottom-1 right-1 bg-sky-500/90 backdrop-blur-xs text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold">
+                                    F{index + 1}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="pt-6 border-t border-sky-100 flex flex-wrap justify-end gap-3">
                     <button 

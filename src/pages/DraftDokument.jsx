@@ -29,45 +29,51 @@ const formatNamaDraft = (file) => {
   
   const isKerusakan = jenisId ? (jenisId === 2 || jenisId === '2') : namaTemplate.toLowerCase().includes('kerusakan');
   const isSuratTugas = jenisId ? (jenisId === 3 || jenisId === '3') : namaTemplate.toLowerCase().includes('surat tugas');
-  const isPenyerahan = !isKerusakan && !isSuratTugas;
+  const isTorBarang = jenisId ? (jenisId === 4 || jenisId === '4') : (namaTemplate.toLowerCase().includes('tor barang') || namaTemplate.toLowerCase().includes('tor_barang'));
+  const isTorJasa = jenisId ? (jenisId === 5 || jenisId === '5') : (namaTemplate.toLowerCase().includes('tor jasa') || namaTemplate.toLowerCase().includes('tor_jasa'));
 
-  // 1. BA KERUSAKAN -> Panggil Nama Alat
+  // 1. BA KERUSAKAN
   if (isKerusakan) {
     const namaAlat = getVal(dataInput, ['nama_alat', 'alat', 'nama_barang']);
-    if (namaAlat) return `BA Kerusakan - ${namaAlat}`;
-    return `BA Kerusakan - Draft Baru`;
+    return namaAlat ? `BA Kerusakan - ${namaAlat}` : `BA Kerusakan - Draft Baru`;
   }
 
-  // 2. BA PENYERAHAN -> Panggil Item
-  if (isPenyerahan) {
-    const item = getVal(dataInput, ['item', 'no_item', 'nama_item', 'nama_barang']);
-    if (item) return `BA Penyerahan - ${item}`;
-    return `BA Penyerahan - Draft Baru`;
-  }
-
-  // 3. SURAT TUGAS -> Panggil Nama Pekerja & Lokasi (dalam kurung)
+  // 2. SURAT TUGAS
   if (isSuratTugas) {
     const pekerja = getVal(dataInput, ['nama_pekerja', 'pekerja', 'nama']);
     const lokasi = getVal(dataInput, ['lokasi', 'lokasi_kerja', 'tempat']);
-    
     if (pekerja && lokasi) return `Surat Tugas - ${pekerja} (${lokasi})`;
     if (pekerja) return `Surat Tugas - ${pekerja}`;
     if (lokasi) return `Surat Tugas - (${lokasi})`;
     return `Surat Tugas - Draft Baru`;
   }
 
-  return `${namaTemplate || 'Dokumen'} - Draft Baru`;
+  // 3. TOR BARANG
+  if (isTorBarang) {
+    const barang = getVal(dataInput, ['nama_barang', 'barang', 'pengadaan']);
+    return barang ? `TOR Barang - ${barang}` : `TOR Barang - Draft Baru`;
+  }
+
+  // 4. TOR JASA
+  if (isTorJasa) {
+    const jasa = getVal(dataInput, ['nama_jasa', 'jasa', 'pekerjaan', 'pengadaan']);
+    return jasa ? `TOR Jasa - ${jasa}` : `TOR Jasa - Draft Baru`;
+  }
+
+  // 5. BA PENYERAHAN
+  const item = getVal(dataInput, ['item', 'no_item', 'nama_item', 'nama_barang']);
+  return item ? `BA Penyerahan - ${item}` : `BA Penyerahan - Draft Baru`;
 };
 
 function DraftDokumen() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // State Manajemen Data
+  // State Manajemen Data (Default ke 'Kerusakan')
   const [drafts, setDrafts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [kategoriAktif, setKategoriAktif] = useState('Semua'); 
+  const [kategoriAktif, setKategoriAktif] = useState('Kerusakan'); 
 
   // Deteksi otomatis kategori dari URL
   useEffect(() => {
@@ -77,8 +83,12 @@ function DraftDokumen() {
       setKategoriAktif('Penyerahan');
     } else if (location.pathname.includes('surat-tugas')) {
       setKategoriAktif('Surat Tugas');
+    } else if (location.pathname.includes('tor-barang')) {
+      setKategoriAktif('Tor Barang');
+    } else if (location.pathname.includes('tor-jasa')) {
+      setKategoriAktif('Tor Jasa');
     } else {
-      setKategoriAktif('Semua');
+      setKategoriAktif('Kerusakan');
     }
     ambilDaftarDraft();
   }, [location.pathname]);
@@ -123,25 +133,20 @@ function DraftDokumen() {
 
     const namaTemplate = file.template?.nama || '';
     const jenisId = file.jenis_dokumen_id || file.template?.jenis_dokumen_id;
+    
     const isKerusakan = jenisId ? (jenisId === 2 || jenisId === '2') : namaTemplate.toLowerCase().includes('kerusakan');
     const isSuratTugas = jenisId ? (jenisId === 3 || jenisId === '3') : namaTemplate.toLowerCase().includes('surat tugas');
+    const isTorBarang = jenisId ? (jenisId === 4 || jenisId === '4') : (namaTemplate.toLowerCase().includes('tor barang') || namaTemplate.toLowerCase().includes('tor_barang'));
+    const isTorJasa = jenisId ? (jenisId === 5 || jenisId === '5') : (namaTemplate.toLowerCase().includes('tor jasa') || namaTemplate.toLowerCase().includes('tor_jasa'));
+    const isPenyerahan = !isKerusakan && !isSuratTugas && !isTorBarang && !isTorJasa;
 
-    if (kategoriAktif === 'Kerusakan') {
-      if (jenisId) return cocokNama && (jenisId === 2 || jenisId === '2');
-      return cocokNama && isKerusakan;
-    }
+    if (kategoriAktif === 'Kerusakan') return cocokNama && isKerusakan;
+    if (kategoriAktif === 'Penyerahan') return cocokNama && isPenyerahan;
+    if (kategoriAktif === 'Surat Tugas') return cocokNama && isSuratTugas;
+    if (kategoriAktif === 'Tor Barang') return cocokNama && isTorBarang;
+    if (kategoriAktif === 'Tor Jasa') return cocokNama && isTorJasa;
     
-    if (kategoriAktif === 'Penyerahan') {
-      if (jenisId) return cocokNama && (jenisId === 1 || jenisId === '1');
-      return cocokNama && !isKerusakan && !isSuratTugas; 
-    }
-
-    if (kategoriAktif === 'Surat Tugas') {
-      if (jenisId) return cocokNama && (jenisId === 3 || jenisId === '3');
-      return cocokNama && isSuratTugas;
-    }
-    
-    return cocokNama;
+    return false;
   });
 
   return (
@@ -157,7 +162,7 @@ function DraftDokumen() {
           <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-black text-slate-800 tracking-tight">
-                Draft <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">{kategoriAktif !== 'Semua' ? kategoriAktif : 'BA & Surat Tugas'}</span>
+                Draft <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">{kategoriAktif}</span>
               </h1>
             </div>
           </section>
@@ -166,24 +171,26 @@ function DraftDokumen() {
           <section className="bg-white p-3.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             
             {/* TAB KATEGORI */}
-            <div className="flex items-center gap-1.5 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60">
-              {['Semua', 'Kerusakan', 'Penyerahan', 'Surat Tugas'].map((tab) => (
+            <div className="flex items-center gap-1.5 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60 overflow-x-auto custom-scrollbar">
+              {['Kerusakan', 'Penyerahan', 'Surat Tugas', 'Tor Barang', 'Tor Jasa'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setKategoriAktif(tab)}
-                  className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer transform active:scale-95 ${
+                  className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer whitespace-nowrap transform active:scale-95 ${
                     kategoriAktif === tab 
                       ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.03]' 
                       : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
                   }`}
                 >
-                  {tab === 'Semua' 
-                    ? '📂 Semua' 
-                    : tab === 'Kerusakan' 
+                  {tab === 'Kerusakan' 
                     ? '⚠️ BA Kerusakan' 
                     : tab === 'Penyerahan' 
                     ? '🤝 BA Penyerahan' 
-                    : '💼 Surat Tugas'}
+                    : tab === 'Surat Tugas' 
+                    ? '💼 Surat Tugas'
+                    : tab === 'Tor Barang'
+                    ? '📦 TOR Barang'
+                    : '🛠️ TOR Jasa'}
                 </button>
               ))}
             </div>
@@ -231,24 +238,32 @@ function DraftDokumen() {
 
                   const namaTemplate = draft.template?.nama || 'Dokumen';
                   const jenisId = draft.jenis_dokumen_id || draft.template?.jenis_dokumen_id;
+                  
                   const isKerusakan = jenisId ? (jenisId === 2 || jenisId === '2') : namaTemplate.toLowerCase().includes('kerusakan');
                   const isSuratTugas = jenisId ? (jenisId === 3 || jenisId === '3') : namaTemplate.toLowerCase().includes('surat tugas');
+                  const isTorBarang = jenisId ? (jenisId === 4 || jenisId === '4') : (namaTemplate.toLowerCase().includes('tor barang') || namaTemplate.toLowerCase().includes('tor_barang'));
+                  const isTorJasa = jenisId ? (jenisId === 5 || jenisId === '5') : (namaTemplate.toLowerCase().includes('tor jasa') || namaTemplate.toLowerCase().includes('tor_jasa'));
 
-                  const targetRoute = isKerusakan 
-                    ? '/draft-kerusakan' 
-                    : isSuratTugas 
-                    ? '/draft-surat-tugas' 
-                    : '/draft-penyerahan';
-
+                  let targetRoute = '/draft-penyerahan';
                   let teksBadge = '🤝 Penyerahan';
                   let warnaBadge = 'bg-emerald-50/90 text-emerald-600 border border-emerald-100';
 
                   if (isKerusakan) {
+                    targetRoute = '/draft-kerusakan';
                     teksBadge = '⚠️ Kerusakan';
                     warnaBadge = 'bg-rose-50/90 text-rose-600 border border-rose-100';
                   } else if (isSuratTugas) {
+                    targetRoute = '/draft-surat-tugas';
                     teksBadge = '💼 Surat Tugas';
                     warnaBadge = 'bg-sky-100/80 text-sky-700 border border-sky-200/60';
+                  } else if (isTorBarang) {
+                    targetRoute = '/draft-tor-barang';
+                    teksBadge = '📦 TOR Barang';
+                    warnaBadge = 'bg-amber-50/90 text-amber-600 border border-amber-100';
+                  } else if (isTorJasa) {
+                    targetRoute = '/draft-tor-jasa';
+                    teksBadge = '🛠️ TOR Jasa';
+                    warnaBadge = 'bg-purple-50/90 text-purple-600 border border-purple-100';
                   }
 
                   return (

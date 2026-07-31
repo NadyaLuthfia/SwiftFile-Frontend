@@ -21,10 +21,49 @@ function Dashboard() {
   const [myActivities, setMyActivities] = useState([]);
   const [loadingActivities, setLoadingActivities] = useState(true);
 
-  // 🌟 FUNGSI 1: Ambil data statistik personal dari API Laravel
-  const fetchDashboardStats = async () => {
+  // 🛠️ FUNGSI BANTUAN: Normalisasi data dari Laravel agar sesuai dengan tampilan
+  const formatRekapData = (rawList) => {
+    if (!Array.isArray(rawList)) return [];
+    
+    return rawList.map((item) => {
+      const hasLastDoc = (item.nomor_terakhir && item.nomor_terakhir !== 'Belum ada') || item.dokumen_terakhir;
+
+      const words = (item.jenis_file || item.nama_template || 'DOC').split(' ');
+      const generatedCode = item.kode_template || (words.length > 1 
+        ? `${words[0].substring(0, 2).toUpperCase()}-${words[1].substring(0, 3).toUpperCase()}`
+        : words[0].substring(0, 4).toUpperCase());
+
+      let lastDocObj = null;
+      if (hasLastDoc) {
+        if (item.dokumen_terakhir) {
+          lastDocObj = item.dokumen_terakhir;
+        } else {
+          lastDocObj = {
+            id_dokumen: item.id_dokumen || item.id,
+            nama_dokumen: item.jenis_file || item.nama_dokumen || 'Dokumen Arsip',
+            nomor_dokumen: item.nomor_terakhir || item.nomor_dokumen,
+            waktu_dibuat: item.tanggal_terakhir || item.waktu_dibuat || '-'
+          };
+        }
+      }
+
+      return {
+        id: item.id,
+        nama_template: item.jenis_file || item.nama_template || 'Template Dokumen',
+        kode_template: generatedCode,
+        total_dibuat_saya: item.total_dicetak ?? item.total_dibuat_saya ?? item.total_dibuat ?? 0,
+        dokumen_terakhir: lastDocObj
+      };
+    });
+  };
+
+  // 🌟 FUNGSI UTAMA: Ambil Data Statistik & Rekapitulasi Personal
+  const fetchDashboardData = async () => {
+    setLoadingActivities(true);
     try {
       const token = localStorage.getItem('token');
+      
+      // 1. Coba ambil data statistik & rekap utama dari /dashboard/stats
       const response = await fetch(`${BASE_URL}/dashboard/stats`, {
         method: 'GET',
         headers: {
@@ -35,23 +74,25 @@ function Dashboard() {
 
       const data = await response.json();
 
-      if (response.ok && data.success && data.stats) {
-        setStats([
-          { label: 'File Template', val: data.stats.total_templates ?? 0, unit: 'File', route: '/file-template' },
-          { label: 'Total Arsip Sah Saya', val: data.stats.user_total_arsip ?? data.stats.total_arsip ?? 0, unit: 'Dokumen', route: '/arsip-history' }
-        ]);
-      }
-    } catch (error) {
-      console.error("Gagal mengambil data statistik user:", error);
-    }
-  };
+      if (response.ok && (data.success || data.stats)) {
+        if (data.stats) {
+          setStats([
+            { label: 'File Template', val: data.stats.total_templates ?? 0, unit: 'File', route: '/file-template' },
+            { label: 'Total Arsip Sah Saya', val: data.stats.user_total_arsip ?? data.stats.total_arsip ?? 0, unit: 'Dokumen', route: '/arsip-history' }
+          ]);
+        }
 
-  // 🌟 FUNGSI 2: Ambil riwayat aktivitas dokumen yang hanya dibuat oleh user ini
-  const fetchMyTemplateActivities = async () => {
-    setLoadingActivities(true);
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${BASE_URL}/dashboard/my-template-summary`, {
+        // Cek jika data rekap dikirim bersamaan di endpoint /dashboard/stats
+        const listRekap = data.user_rekap || data.rekap || data.my_rekap;
+        if (Array.isArray(listRekap) && listRekap.length > 0) {
+          setMyActivities(formatRekapData(listRekap));
+          setLoadingActivities(false);
+          return;
+        }
+      }
+
+      // 2. Jika di /dashboard/stats tidak ada rekap, panggil endpoint khusus personal
+      const resSummary = await fetch(`${BASE_URL}/dashboard/my-template-summary`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -59,59 +100,24 @@ function Dashboard() {
         }
       });
 
-      const resResult = await response.json();
+      const resResult = await resSummary.json();
+      const summaryData = resResult.data || resResult.rekap || resResult;
 
-      if (response.ok && resResult.status === 'success') {
-        setMyActivities(resResult.data);
+      if (resSummary.ok && Array.isArray(summaryData)) {
+        setMyActivities(formatRekapData(summaryData));
       } else {
-        // Mock data fallback khusus dokumen milik user login
-        setMyActivities([
-          {
-            id: 1,
-            nama_template: 'BA Kerusakan Barang',
-            kode_template: 'BA-KER',
-            total_dibuat_saya: 5,
-            dokumen_terakhir: {
-              id_dokumen: 101,
-              nama_dokumen: 'Berita Acara Kerusakan Monitor Divisi HR',
-              nomor_dokumen: 'BA-KER/2026/005',
-              waktu_dibuat: '22 Juli 2026, 10:30 WIB'
-            }
-          },
-          {
-            id: 2,
-            nama_template: 'BA Penyerahan Asset',
-            kode_template: 'BA-NYERAH',
-            total_dibuat_saya: 8,
-            dokumen_terakhir: {
-              id_dokumen: 102,
-              nama_dokumen: 'Penyerahan Laptop Operational Baru',
-              nomor_dokumen: 'BA-PEN/2026/008',
-              waktu_dibuat: '21 Juli 2026, 15:45 WIB'
-            }
-          },
-          {
-            id: 3,
-            nama_template: 'Surat Tugas Operasional',
-            kode_template: 'ST-OPS',
-            total_dibuat_saya: 12,
-            dokumen_terakhir: {
-              id_dokumen: 103,
-              nama_dokumen: 'Surat Tugas Perjalanan Dinas Samarinda',
-              nomor_dokumen: 'ST/2026/012',
-              waktu_dibuat: '18 Juli 2026, 08:20 WIB'
-            }
-          }
-        ]);
+        setMyActivities([]);
       }
+
     } catch (error) {
-      console.error("Gagal mengambil data ringkasan template user:", error);
+      console.error("Gagal mengambil data dashboard user:", error);
+      setMyActivities([]);
     } finally {
       setLoadingActivities(false);
     }
   };
 
-  // 🌟 FUNGSI 3: Navigasi langsung ke Arsip History saat dokumen diklik
+  // 🌟 FUNGSI: Navigasi langsung ke Arsip History saat dokumen diklik
   const handleGoToArsip = (dokumen) => {
     if (!dokumen) return;
     
@@ -138,7 +144,7 @@ function Dashboard() {
       return;
     }
 
-    // 🔒 PROTEKSI ROUTE
+    // 🔒 PROTEKSI ROUTE PRIVAT USER
     if (role === 'master_admin') {
       navigate('/master-dashboard');
       return;
@@ -156,8 +162,7 @@ function Dashboard() {
     const tanggalSekarang = new Date().toLocaleDateString('id-ID', opsi);
     setCurrentDate(`🔹 ${tanggalSekarang}`);
 
-    fetchDashboardStats();
-    fetchMyTemplateActivities();
+    fetchDashboardData();
   }, []);
 
   const statIcons = ['📁', '✨'];
@@ -190,7 +195,7 @@ function Dashboard() {
             </div>
           </header>
 
-          {/* 📊 STATISTIK SECTION (2 KOTAK PERSIS ADMIN) */}
+          {/* 📊 STATISTIK SECTION */}
           <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {stats.map((item, index) => (
               <div 
@@ -260,7 +265,7 @@ function Dashboard() {
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 font-medium mt-1">
-                          Total Anda Buat: <strong className="text-sky-700 font-black">{tpl.total_dibuat_saya ?? tpl.total_dibuat ?? 0} Dokumen</strong>
+                          Total Anda Buat: <strong className="text-sky-700 font-black">{tpl.total_dibuat_saya} Dokumen</strong>
                         </p>
                       </div>
                     </div>

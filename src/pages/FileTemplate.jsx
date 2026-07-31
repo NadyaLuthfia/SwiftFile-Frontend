@@ -201,7 +201,15 @@ function FileTemplate() {
                       
                       {/* 🌟 BADGE DEN GAN WARNA SERAGAM BIRU SURAT TUGAS */}
                       <span className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold uppercase tracking-wide border shadow-2xs bg-sky-100/80 text-sky-700 border-sky-200/60">
-                        {t.jenis_dokumen_id === 2 ? '⚠️ Kerusakan' : t.jenis_dokumen_id === 3 ? '💼 Surat Tugas' : '🤝 Penyerahan'}
+                        {t.jenis_dokumen_id === 2 
+                          ? '⚠️ Kerusakan' 
+                          : t.jenis_dokumen_id === 3 
+                          ? '💼 Surat Tugas' 
+                          : t.jenis_dokumen_id === 4 
+                          ? '📋 TOR Barang' 
+                          : t.jenis_dokumen_id === 5
+                          ? '📓 TOR Jasa' 
+                          : '🤝 Penyerahan'}
                       </span>
                     </div>
 
@@ -222,6 +230,10 @@ function FileTemplate() {
                           navigate(`/draft-kerusakan?template_id=${t.id}`);
                         } else if (t.jenis_dokumen_id === 3) {
                           navigate(`/draft-surat-tugas?template_id=${t.id}`);
+                        } else if (t.jenis_dokumen_id === 4) {
+                          navigate(`/draft-tor-barang?template_id=${t.id}`);
+                        } else if (t.jenis_dokumen_id === 5) {
+                          navigate(`/draft-tor-jasa?template_id=${t.id}`);
                         } else {
                           navigate(`/draft-penyerahan?template_id=${t.id}`);
                         }
@@ -294,6 +306,8 @@ function FileTemplate() {
                   <option value={1}>BA Penyerahan</option>
                   <option value={2}>BA Kerusakan</option>
                   <option value={3}>Surat Tugas</option>
+                  <option value={4}>TOR Barang</option>
+                  <option value={5}>TOR Jasa</option>
                 </select>
               </div>
 

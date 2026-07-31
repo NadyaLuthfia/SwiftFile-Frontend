@@ -21,7 +21,8 @@ function DraftKerusakan() {
   const [loadingDraft, setLoadingDraft] = useState(false); 
   const [loadingSelesai, setLoadingSelesai] = useState(false); 
 
-  // State & Ref Preview Foto di Frontend
+  // 🌟 State khusus penampung array file foto & preview
+  const [photoFiles, setPhotoFiles] = useState([]);
   const [filePreviews, setFilePreviews] = useState({});
   const filePreviewsRef = useRef({});
 
@@ -79,7 +80,6 @@ function DraftKerusakan() {
         setTextContent(res.data.text_content || ''); 
 
         if (dataLama) {
-          // KONDISI EDIT DRAFT LAMA
           const cleanedData = { ...dataLama };
           Object.keys(cleanedData).forEach(key => {
             if (cleanedData[key] === 'null' || cleanedData[key] === null || cleanedData[key] === undefined) {
@@ -109,7 +109,6 @@ function DraftKerusakan() {
           setCalendarDate(`${yyyy}-${mm}-${dd}`);
           setLoadingFetch(false);
         } else {
-          // KONDISI DRAFT BARU (GENERATE NOMOR OTOMATIS)
           const initialFormState = {};
           listVariabel.forEach(variable => {
             initialFormState[variable] = ''; 
@@ -270,19 +269,48 @@ function DraftKerusakan() {
     }
   };
 
-  const handleFileChange = (e, variableName) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  // -------------------------------------------------------------------------
+  // MANAJEMEN FOTO DINAMIS
+  // -------------------------------------------------------------------------
+  const updatePhotosState = (updatedList) => {
+    Object.values(filePreviewsRef.current).forEach(url => {
+      if (url) URL.revokeObjectURL(url);
+    });
 
-    setFormData(prev => ({ ...prev, [variableName]: file }));
+    const newPreviews = {};
+    const newFormData = { ...formData };
 
-    if (filePreviewsRef.current[variableName]) {
-      URL.revokeObjectURL(filePreviewsRef.current[variableName]);
-    }
+    Object.keys(newFormData).forEach(key => {
+      if (key.startsWith('foto_')) {
+        delete newFormData[key];
+      }
+    });
 
-    const previewUrl = URL.createObjectURL(file);
-    filePreviewsRef.current[variableName] = previewUrl; 
-    setFilePreviews(prev => ({ ...prev, [variableName]: previewUrl }));
+    updatedList.forEach((file, index) => {
+      const varName = `foto_${index + 1}`;
+      newFormData[varName] = file;
+      newPreviews[varName] = URL.createObjectURL(file);
+    });
+
+    filePreviewsRef.current = newPreviews;
+    setPhotoFiles(updatedList);
+    setFilePreviews(newPreviews);
+    setFormData(newFormData);
+  };
+
+  const handleMultipleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    const updatedList = [...photoFiles, ...files];
+    updatePhotosState(updatedList);
+
+    e.target.value = '';
+  };
+
+  const handleRemovePhoto = (indexToRemove) => {
+    const updatedList = photoFiles.filter((_, index) => index !== indexToRemove);
+    updatePhotosState(updatedList);
   };
 
   const pilihKaryawan = (karyawan, tipeVariable) => {
@@ -306,6 +334,9 @@ function DraftKerusakan() {
     if (tipeVariable === 'nama_pengetahui') setShowPengetahuiDropdown(false);
   };
 
+  // -------------------------------------------------------------------------
+  // 🌟 GENERATE MULTIPART DATA (PERBAIKAN FOTO FIELD)
+  // -------------------------------------------------------------------------
   const generateMultipartData = (statusDokumen, isCetakLangsung = false) => {
     const data = new FormData();
     data.append('template_id', currentTemplateId);
@@ -334,15 +365,20 @@ function DraftKerusakan() {
     data.append('jumlah', 1); 
     data.append('keterangan_item', formData['keterangan_kerusakan'] || '');
 
+    // 1. Send all photo files using field name 'foto[]' for Laravel controller
+    photoFiles.forEach((file) => {
+      data.append('foto[]', file);
+    });
+
+    // 2. Send other input values as text variables
     Object.keys(formData).forEach(key => {
       let item = formData[key];
       if (item === null || item === undefined || item === 'null') {
         item = '';
       }
 
-      if (item instanceof File) {
-        data.append(key, item);
-      } else {
+      // Skip File objects from being sent as text strings
+      if (!(item instanceof File)) {
         if (key === 'bulan' && !isCetakLangsung) {
           const romawiMap = {
             'Januari': 'I', 'Februari': 'II', 'Maret': 'III', 'April': 'IV', 'Mei': 'V', 'Juni': 'VI',
@@ -436,7 +472,7 @@ function DraftKerusakan() {
   };
 
   // =========================================================================
-  // LIVE PREVIEW DENGAN AKSEN SKY BLUE SESUAI FILE TEMPLATE
+  // LIVE PREVIEW
   // =========================================================================
   const renderLivePreview = () => {
     if (!textContent) {
@@ -558,66 +594,47 @@ function DraftKerusakan() {
                   {/* VARIABEL DINAMIS LAINNYA */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {fields
-                      .filter(v => v !== 'no' && v !== 'bulan' && v !== 'tahun' && v !== 'tanggal' && v !== 'hari')
+                      .filter(v => v !== 'no' && v !== 'bulan' && v !== 'tahun' && v !== 'tanggal' && v !== 'hari' && !v.startsWith('foto_'))
                       .map((variableName) => {
                         const isLaporan = variableName === 'nama_laporan';
                         const isPenanggung = variableName === 'nama_penanggung';
                         const isPengetahui = variableName === 'nama_pengetahui';
-                        const isPhoto = variableName.startsWith('foto_');
                         
                         return (
-                          <div key={variableName} className={`flex flex-col gap-1.5 ${isLaporan || isPenanggung || isPengetahui ? 'relative' : ''} ${isPhoto ? 'md:col-span-2' : ''}`}>
+                          <div key={variableName} className={`flex flex-col gap-1.5 ${isLaporan || isPenanggung || isPengetahui ? 'relative' : ''}`}>
                             <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
                               {formatLabel(variableName)} <span className="text-slate-400 font-mono text-[10px] font-normal">({variableName})</span>
                             </label>
                             
-                            {isPhoto ? (
-                              <div className="flex items-center gap-4 border border-sky-100/80 rounded-2xl p-3 bg-[#F4F8FC]/50 hover:border-sky-300 transition-all">
-                                <input 
-                                  type="file" 
-                                  accept="image/*"
-                                  onChange={(e) => handleFileChange(e, variableName)}
-                                  className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer flex-1"
-                                />
-                                {filePreviews[variableName] && (
-                                  <img 
-                                    src={filePreviews[variableName]} 
-                                    alt="Mini Preview" 
-                                    className="w-16 h-12 object-cover rounded-xl border border-sky-100 shadow-xs"
-                                  />
-                                )}
-                              </div>
+                            {variableName === 'kronologis' || variableName === 'fungsi_alat' ? (
+                              <textarea
+                                name={variableName}
+                                value={formData[variableName] || ''}
+                                onChange={handleChange}
+                                className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all h-20 resize-none"
+                                required
+                              />
                             ) : (
-                              variableName === 'kronologis' || variableName === 'fungsi_alat' ? (
-                                <textarea
-                                  name={variableName}
-                                  value={formData[variableName] || ''}
-                                  onChange={handleChange}
-                                  className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all h-20 resize-none"
-                                  required
-                                />
-                              ) : (
-                                <input 
-                                  type="text" 
-                                  name={variableName} 
-                                  value={formData[variableName] || ''} 
-                                  onChange={handleChange}
-                                  onFocus={() => {
-                                    if (isLaporan && formData.nama_laporan) setShowLaporanDropdown(true);
-                                    if (isPenanggung && formData.nama_penanggung) setShowPenanggungDropdown(true);
-                                    if (isPengetahui && formData.nama_pengetahui) setShowPengetahuiDropdown(true);
-                                  }}
-                                  onBlur={() => {
-                                    setTimeout(() => {
-                                      if (isLaporan) setShowLaporanDropdown(false);
-                                      if (isPenanggung) setShowPenanggungDropdown(false);
-                                      if (isPengetahui) setShowPengetahuiDropdown(false);
-                                    }, 200);
-                                  }}
-                                  className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all"
-                                  required 
-                                />
-                              )
+                              <input 
+                                type="text" 
+                                name={variableName} 
+                                value={formData[variableName] || ''} 
+                                onChange={handleChange}
+                                onFocus={() => {
+                                  if (isLaporan && formData.nama_laporan) setShowLaporanDropdown(true);
+                                  if (isPenanggung && formData.nama_penanggung) setShowPenanggungDropdown(true);
+                                  if (isPengetahui && formData.nama_pengetahui) setShowPengetahuiDropdown(true);
+                                }}
+                                onBlur={() => {
+                                  setTimeout(() => {
+                                    if (isLaporan) setShowLaporanDropdown(false);
+                                    if (isPenanggung) setShowPenanggungDropdown(false);
+                                    if (isPengetahui) setShowPengetahuiDropdown(false);
+                                  }, 200);
+                                }}
+                                className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all"
+                                required 
+                              />
                             )}
 
                             {/* DROPDOWN AUTOCOMPLETE */}
@@ -655,7 +672,64 @@ function DraftKerusakan() {
                       })}
                   </div>
 
-                  {/* TOMBOL DENGAN GRADASI SKY-BLUE SEPERTI FILE TEMPLATE */}
+                  {/* SECTION UPLOAD FOTO MULTIPLE */}
+                  {fields.some(v => v.startsWith('foto_')) && (
+                    <div className="md:col-span-2 flex flex-col gap-1.5 border-t border-sky-100 pt-4">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
+                          Upload Foto Dokumentasi <span className="text-slate-400 font-normal lowercase">(Bisa pilih banyak & nambah 1 per 1)</span>
+                        </label>
+                        <span className="text-xs font-bold text-sky-600">
+                          {photoFiles.length} foto terpilih
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-4 border border-sky-100/80 rounded-2xl p-4 bg-[#F4F8FC]/50 hover:border-sky-300 transition-all">
+                        <input 
+                          type="file" 
+                          accept="image/*"
+                          multiple
+                          onChange={handleMultipleFileChange}
+                          className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer flex-1"
+                        />
+
+                        {/* PREVIEW FOTO */}
+                        {photoFiles.length > 0 && (
+                          <div className="flex flex-wrap gap-3 mt-2">
+                            {photoFiles.map((file, index) => {
+                              const key = `foto_${index + 1}`;
+                              const previewUrl = filePreviews[key];
+
+                              return (
+                                <div key={index} className="relative group w-20 h-20">
+                                  <img 
+                                    src={previewUrl} 
+                                    alt={`Preview ${key}`} 
+                                    className="w-full h-full object-cover rounded-xl border border-sky-200 shadow-xs"
+                                  />
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemovePhoto(index)}
+                                    title="Hapus foto ini"
+                                    className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md transition-all cursor-pointer transform hover:scale-110"
+                                  >
+                                    ✕
+                                  </button>
+
+                                  <span className="absolute bottom-1 right-1 bg-sky-500/90 backdrop-blur-xs text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold">
+                                    F{index + 1}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TOMBOL AKSI */}
                   <div className="pt-6 border-t border-sky-100 flex flex-wrap justify-end gap-3">
                     <button 
                       type="button" 

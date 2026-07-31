@@ -6,7 +6,7 @@ import axios from 'axios';
 const API_BASE_URL = 'http://localhost:8000/api';
 
 function SiapCetak() {
-  // 1. STATE UTAMA & NAVIGASI 3 TAB
+  // 1. STATE UTAMA & NAVIGASI 5 TAB
   const [activeTab, setActiveTab] = useState('ba_penyerahan'); 
   const [antreanList, setAntreanList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +43,7 @@ function SiapCetak() {
     ambilAntreanCetak();
   }, [ambilAntreanCetak]);
 
-  // 3. AKSI: PRINT & UPDATE STATUS
+  // 3. AKSI: PRINT & UPDATE STATUS (Sekaligus Update Tanggal Cetak)
   const handlePrintAction = (id, namaDokumen) => {
     axios.put(`${API_BASE_URL}/siap-cetak/${id}/status`, {
       copies: 1,
@@ -63,6 +63,7 @@ function SiapCetak() {
           }
         }
 
+        // Refresh antrean agar tanggal_cetak terbaru langsung muncul di tabel UI
         ambilAntreanCetak(); 
       })
       .catch(err => {
@@ -70,7 +71,7 @@ function SiapCetak() {
       });
   };
 
-  // 4. AKSI FINAL A: UNGGAH FOTO BUKTI TANDA TANGAN
+  // 4. AKSI FINAL A: UNGGAH FOTO BUKTI TANDA TANGAN (BA Penyerahan & BA Kerusakan)
   const handleUploadAction = (id, event) => {
     const fileTarget = event.target.files[0];
     if (!fileTarget) return;
@@ -89,14 +90,14 @@ function SiapCetak() {
       });
   };
 
-  // 5. AKSI FINAL B: KHUSUS SURAT TUGAS
-  const handleSelesaiSuratTugas = (id) => {
+  // 5. AKSI FINAL B: KHUSUS SURAT TUGAS, TOR BARANG & TOR JASA (TANPA UPLOAD TTD)
+  const handleSelesaiTanpaTtd = (id) => {
     axios.post(`${API_BASE_URL}/siap-cetak/${id}/selesai`, {}, getAuthConfig())
       .then(() => {
         ambilAntreanCetak(); 
       })
       .catch(err => {
-        console.error("Detail Error Selesai Surat Tugas:", err.response ? err.response.data : err);
+        console.error("Detail Error Selesai Dokumen:", err.response ? err.response.data : err);
       });
   };
 
@@ -149,6 +150,10 @@ function SiapCetak() {
       if (activeTab === 'ba_penyerahan' && !gabunganTeks.includes('penyerahan')) return false;
       if (activeTab === 'ba_kerusakan' && !gabunganTeks.includes('kerusakan')) return false;
       if (activeTab === 'surat_tugas' && !gabunganTeks.includes('tugas')) return false;
+      
+      // Filter khusus TOR Barang & TOR Jasa
+      if (activeTab === 'tor_barang' && !(gabunganTeks.includes('tor') && gabunganTeks.includes('barang'))) return false;
+      if (activeTab === 'tor_jasa' && !(gabunganTeks.includes('tor') && gabunganTeks.includes('jasa'))) return false;
 
       return true;
     });
@@ -159,7 +164,7 @@ function SiapCetak() {
     return 'border-sky-500 text-sky-600 font-black';
   };
 
-  const formatTanggalBerangkat = (dateStr) => {
+  const formatTanggalIndo = (dateStr) => {
     if (!dateStr) return '-';
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr; 
@@ -214,28 +219,42 @@ function SiapCetak() {
             </div>
           </section>
 
-          {/* NAVIGASI 3 TAB */}
-          <div className="flex border-b border-sky-100 gap-2">
+          {/* NAVIGASI 5 TAB */}
+          <div className="flex border-b border-sky-100 gap-2 overflow-x-auto custom-scrollbar">
             <button
               type="button"
               onClick={() => setActiveTab('ba_penyerahan')}
-              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative ${dapatkanWarnaTab('ba_penyerahan')}`}
+              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative whitespace-nowrap ${dapatkanWarnaTab('ba_penyerahan')}`}
             >
               📄 BA Penyerahan
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('ba_kerusakan')}
-              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative ${dapatkanWarnaTab('ba_kerusakan')}`}
+              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative whitespace-nowrap ${dapatkanWarnaTab('ba_kerusakan')}`}
             >
               ⚠️ BA Kerusakan
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('surat_tugas')}
-              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative ${dapatkanWarnaTab('surat_tugas')}`}
+              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative whitespace-nowrap ${dapatkanWarnaTab('surat_tugas')}`}
             >
               💼 Surat Tugas
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('tor_barang')}
+              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative whitespace-nowrap ${dapatkanWarnaTab('tor_barang')}`}
+            >
+              📦 TOR Barang
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('tor_jasa')}
+              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative whitespace-nowrap ${dapatkanWarnaTab('tor_jasa')}`}
+            >
+              🛠️ TOR Jasa
             </button>
           </div>
 
@@ -268,6 +287,7 @@ function SiapCetak() {
                       // Mengambil variabel khusus dari form / data_input
                       const namaItem = dapatkanValueSakti(file, 'ITEM') || dapatkanValueSakti(file, 'NO_ITEM');
                       const namaAlat = dapatkanValueSakti(file, 'NAMA_ALAT') || dapatkanValueSakti(file, 'NAMA_BARANG') || dapatkanValueSakti(file, 'ITEM');
+                      const namaKegiatan = dapatkanValueSakti(file, 'KEGIATAN') || dapatkanValueSakti(file, 'NAMA_KEGIATAN') || dapatkanValueSakti(file, 'PEKERJAAN');
                       
                       // Ambil khusus tanggal berangkat dari variabel form
                       const tglBerangkatInput = 
@@ -287,29 +307,50 @@ function SiapCetak() {
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-3">
                               <span className="text-2xl select-none flex-shrink-0 transition-transform duration-300 group-hover:scale-110">📄</span>
-                              <div className="min-w-0">
+                              <div className="min-w-0 space-y-0.5">
                                 <p className="text-slate-900 font-bold truncate max-w-[480px]" title={namaTampilan}>
                                   {namaTampilan}
                                 </p>
                                 
                                 {/* 1. SURAT TUGAS */}
                                 {activeTab === 'surat_tugas' && (
-                                  <p className="text-[10px] text-sky-600 font-semibold mt-0.5 flex items-center gap-1">
-                                    📅 Berangkat: {formatTanggalBerangkat(tglBerangkatInput || file.created_at)}
+                                  <p className="text-[10px] text-sky-600 font-semibold flex items-center gap-1">
+                                    📅 Berangkat: {formatTanggalIndo(tglBerangkatInput || file.created_at)}
                                   </p>
                                 )}
 
-                                {/* 2. BA PENYERAHAN: HANYA ITEM */}
+                                {/* 2. BA PENYERAHAN */}
                                 {activeTab === 'ba_penyerahan' && (
-                                  <p className="text-[10px] text-sky-600 font-semibold mt-0.5 flex items-center gap-2 truncate max-w-[480px]">
+                                  <p className="text-[10px] text-sky-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
                                     <span>📦 Item: {namaItem || <span className="italic text-slate-400">[Tidak ada nama item]</span>}</span>
                                   </p>
                                 )}
 
-                                {/* 3. BA KERUSAKAN: HANYA ALAT */}
+                                {/* 3. BA KERUSAKAN */}
                                 {activeTab === 'ba_kerusakan' && (
-                                  <p className="text-[10px] text-amber-600 font-semibold mt-0.5 flex items-center gap-2 truncate max-w-[480px]">
+                                  <p className="text-[10px] text-amber-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
                                     <span>⚠️ Alat: {namaAlat || <span className="italic text-slate-400">[Tidak ada nama alat]</span>}</span>
+                                  </p>
+                                )}
+
+                                {/* 4. TOR BARANG */}
+                                {activeTab === 'tor_barang' && (
+                                  <p className="text-[10px] text-sky-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
+                                    <span>📦 Barang: {namaItem || namaAlat || <span className="italic text-slate-400">[Tidak ada nama barang]</span>}</span>
+                                  </p>
+                                )}
+
+                                {/* 5. TOR JASA */}
+                                {activeTab === 'tor_jasa' && (
+                                  <p className="text-[10px] text-indigo-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
+                                    <span>🛠️ Kegiatan/Jasa: {namaKegiatan || namaItem || <span className="italic text-slate-400">[Tidak ada detail kegiatan]</span>}</span>
+                                  </p>
+                                )}
+
+                                {/* 🖨️ INDIKATOR TANGGAL CETAK TERAKHIR */}
+                                {file.tanggal_cetak && (
+                                  <p className="text-[9px] text-emerald-600 font-bold flex items-center gap-1">
+                                    🖨️ Tanggal Cetak Terakhir: {formatTanggalIndo(file.tanggal_cetak)}
                                   </p>
                                 )}
 
@@ -331,15 +372,17 @@ function SiapCetak() {
 
                               <span className="text-sky-200 text-sm font-light select-none">|</span>
 
-                              {activeTab === 'surat_tugas' ? (
+                              {/* JIKA SURAT TUGAS, TOR BARANG, ATAU TOR JASA -> PAKAI TOMBOL SELESAI */}
+                              {['surat_tugas', 'tor_barang', 'tor_jasa'].includes(activeTab) ? (
                                 <button
                                   type="button"
-                                  onClick={() => handleSelesaiSuratTugas(file.id)}
+                                  onClick={() => handleSelesaiTanpaTtd(file.id)}
                                   className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700 transition-all shadow-xs hover:shadow-md cursor-pointer whitespace-nowrap flex items-center gap-1"
                                 >
                                   ✅ SELESAI
                                 </button>
                               ) : (
+                                /* UNTUK BA PENYERAHAN & BA KERUSAKAN -> TETAP PAKAI UPLOAD TTD */
                                 <label className="inline-block bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-xs shadow-sky-200 cursor-pointer whitespace-nowrap">
                                   📤 UPLOAD TTD
                                   <input 
