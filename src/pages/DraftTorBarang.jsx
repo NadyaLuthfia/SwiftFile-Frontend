@@ -190,7 +190,7 @@ function DraftTorBarang() {
     return acc;
   }, []);
 
-  // 🎯 HELPER FORM DATA PAYLOAD (MEMBUNGKUS 'variables' SEBAGAI JSON STRING)
+  // HELPER FORM DATA PAYLOAD
   const createFormDataPayload = (status = 'draft') => {
     const data = new FormData();
     data.append('template_id', templateId || '');
@@ -205,7 +205,6 @@ function DraftTorBarang() {
       || (itemBarang.nama_barang ? `TOR - ${itemBarang.nama_barang}` : 'Draft TOR Barang');
     data.append('nama_draft', namaDraftValue);
 
-    // 📦 1. BUNGKUS SELURUH FIELD INPUTAN KE DALAM OBJECT 'variables'
     const variablesObject = {
       nama_draft: namaDraftValue,
       pengadaan: formData.pengadaan,
@@ -230,10 +229,8 @@ function DraftTorBarang() {
       }))
     };
 
-    // ✅ 2. APPEND 'variables' SEBAGAI JSON STRING (LULUS VALIDASI LARAVEL)
     data.append('variables', JSON.stringify(variablesObject));
 
-    // 3. Append juga field individual agar kompatibel dengan upload file / $request
     Object.keys(formData).forEach(key => {
       if (key !== 'nama_draft') data.append(key, formData[key]);
     });
@@ -282,7 +279,7 @@ function DraftTorBarang() {
     }
   };
 
-  // Submit Final (Selesai -> SiapCetakController)
+  // Submit Final
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -320,13 +317,13 @@ function DraftTorBarang() {
     if (!list.length) return null;
 
     return (
-      <div className="absolute left-0 right-0 top-full bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1 mt-1">
+      <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
         {list.map((k, idx) => (
           <button
             key={k.id || idx}
             type="button"
             onMouseDown={() => handleSelectKaryawan(k, type)}
-            className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-colors"
+            className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all"
           >
             {k.nama_lengkap || k.nama || k.nama_pegawai} <span className="text-[10px] text-slate-400 font-normal">({k.bidang?.nama_bidang || k.bidang || ''})</span>
           </button>
@@ -336,125 +333,145 @@ function DraftTorBarang() {
   };
 
   return (
-    <div className="bg-[#F4F8FC] text-slate-700 flex h-screen w-full overflow-hidden antialiased" style={{ fontFamily: "'Poppins', sans-serif" }}>
+    <div className="bg-[#F4F8FC] text-slate-700 flex h-screen w-full overflow-hidden antialiased selection:bg-sky-200" style={{ fontFamily: "'Poppins', sans-serif" }}>
       <Sidebar />
 
       <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full custom-scrollbar">
         <div className="w-full max-w-6xl mx-auto space-y-6">
+          
+          {/* HEADER DENGAN GRADIENT TEXT & TOMBOL KEMBALI KONSISTEN */}
           <header className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-black text-slate-800">
-                {draftId ? 'Edit' : 'Draft'} <span className="text-sky-600">TOR Barang</span>
-              </h1>
-              <p className="text-xs text-slate-400 font-medium">Form Input Spesifikasi Teknis & Rincian</p>
-            </div>
-            <button onClick={() => navigate('/draft-dokumen')} className="text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 px-4 py-2.5 rounded-2xl border border-sky-100 cursor-pointer transition-all">
-              ← Kembali
+            <h1 className="text-3xl font-black text-slate-800 tracking-tight">
+              {draftId ? 'Edit Draft:' : 'Draft Baru:'}{' '}
+              <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">
+                TOR Barang
+              </span>
+            </h1>
+            <button 
+              onClick={() => navigate('/draft-dokumen')} 
+              className="text-xs font-bold text-sky-700 bg-sky-50/80 hover:bg-sky-100 px-4 py-2.5 rounded-2xl border border-sky-100/80 transition-all transform hover:scale-105 active:scale-95 shadow-xs cursor-pointer flex items-center gap-1.5"
+            >
+              ⬅️ Kembali
             </button>
           </header>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* FORM INPUT */}
+            
+            {/* PANEL KIRI FORM */}
             <div className="lg:col-span-7">
-              <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-sky-100 shadow-md p-8 space-y-6">
+              <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                 
+                {/* BANNER INFORMASI SINKRONISASI */}
+                <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-sky-950 font-medium">
+                  <span>🤖</span>
+                  <p><b>Form Spesifikasi & Rincian Aktif!</b> Seluruh pengisian di bawah ini langsung terhubung dan tersinkronisasi ke berkas live preview secara real-time.</p>
+                </div>
+
                 {/* 0. Nama Draft */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-sky-700">📌 Nama Draft / Dokumen</label>
+                <div className="flex flex-col gap-1.5 border-b border-sky-100/80 pb-4">
+                  <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider">📌 Nama Draft / Dokumen</label>
                   <input 
                     type="text" 
                     name="nama_draft" 
                     value={formData.nama_draft} 
                     onChange={handleFormChange} 
                     placeholder="Contoh: TOR Pengadaan PC Lab Komputer..." 
-                    className="w-full border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:border-sky-400 bg-[#F4F8FC]/50 font-medium" 
+                    className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all" 
                   />
                   <p className="text-[10px] text-slate-400 italic">*Jika dikosongkan, nama draft otomatis dibuat dari nama barang.</p>
                 </div>
 
                 {/* 1. Pengadaan */}
-                <div className="space-y-2 border-t border-sky-100 pt-5">
-                  <label className="text-xs font-bold uppercase tracking-wider">📝 1. Tujuan Pengadaan</label>
-                  <textarea name="pengadaan" rows={2} value={formData.pengadaan} onChange={handleFormChange} placeholder="Masukkan tujuan pengadaan..." className="w-full border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:border-sky-400 bg-[#F4F8FC]/50 font-medium resize-none" required />
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider">📝 1. Tujuan Pengadaan</label>
+                  <textarea 
+                    name="pengadaan" 
+                    rows={2} 
+                    value={formData.pengadaan} 
+                    onChange={handleFormChange} 
+                    placeholder="Masukkan tujuan pengadaan..." 
+                    className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all resize-none" 
+                    required 
+                  />
                 </div>
 
                 {/* 2. Spesifikasi Teknis */}
-                <div className="space-y-4 border-t border-sky-100 pt-5">
-                  <label className="text-xs font-bold uppercase tracking-wider block">📦 2. Spesifikasi Teknis & Price</label>
-                  <div className="p-5 rounded-2xl bg-[#F4F8FC]/60 border border-sky-100 space-y-3">
+                <div className="space-y-3 border-t border-sky-100/80 pt-5">
+                  <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider block">📦 2. Spesifikasi Teknis & Price</label>
+                  <div className="p-5 rounded-2xl bg-[#F4F8FC]/50 border border-sky-100/80 space-y-3">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div className="md:col-span-2">
-                        <label className="text-[11px] font-bold text-slate-500">Nama Barang</label>
-                        <input type="text" value={itemBarang.nama_barang} onChange={e => handleSpecChange('nama_barang', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400 font-medium" required />
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Barang</label>
+                        <input type="text" value={itemBarang.nama_barang} onChange={e => handleSpecChange('nama_barang', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" required />
                       </div>
                       <div>
-                        <label className="text-[11px] font-bold text-slate-500">Merk</label>
-                        <input type="text" value={itemBarang.merk} onChange={e => handleSpecChange('merk', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400 font-medium" />
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Merk</label>
+                        <input type="text" value={itemBarang.merk} onChange={e => handleSpecChange('merk', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" />
                       </div>
                       <div>
-                        <label className="text-[11px] font-bold text-slate-500">Type</label>
-                        <input type="text" value={itemBarang.type} onChange={e => handleSpecChange('type', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400 font-medium" />
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Type</label>
+                        <input type="text" value={itemBarang.type} onChange={e => handleSpecChange('type', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="text-[11px] font-bold text-slate-500">Persyaratan Tambahan</label>
-                        <input type="text" value={itemBarang.persyaratan_tambahan} onChange={e => handleSpecChange('persyaratan_tambahan', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400 font-medium" />
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Persyaratan Tambahan</label>
+                        <input type="text" value={itemBarang.persyaratan_tambahan} onChange={e => handleSpecChange('persyaratan_tambahan', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" />
                       </div>
                       <div>
-                        <label className="text-[11px] font-bold text-slate-500">Jumlah</label>
-                        <input type="number" min="1" value={itemBarang.jumlah} onChange={e => handleSpecChange('jumlah', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400 font-medium" required />
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Jumlah</label>
+                        <input type="number" min="1" value={itemBarang.jumlah} onChange={e => handleSpecChange('jumlah', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" required />
                       </div>
                       <div>
-                        <label className="text-[11px] font-bold text-slate-500">Harga Satuan (-PPN 11%)</label>
-                        <input type="number" value={itemBarang.harga_satuan} onChange={e => handleSpecChange('harga_satuan', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400 font-medium" required />
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Harga Satuan (-PPN 11%)</label>
+                        <input type="number" value={itemBarang.harga_satuan} onChange={e => handleSpecChange('harga_satuan', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" required />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="text-[11px] font-bold text-slate-500">Jumlah Harga (-PPN 11%)</label>
-                        <input type="number" value={itemBarang.jumlah_harga} readOnly placeholder="Terhitung otomatis" className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs font-bold text-sky-700 bg-sky-50 focus:outline-none" />
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Jumlah Harga (-PPN 11%)</label>
+                        <input type="number" value={itemBarang.jumlah_harga} readOnly placeholder="Terhitung otomatis" className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs font-bold text-sky-700 bg-sky-50 outline-none cursor-not-allowed" />
                       </div>
                     </div>
                   </div>
                 </div>
 
                 {/* 3. Tabel Rincian Barang */}
-                <div className="space-y-4 border-t border-sky-100 pt-5">
-                  <label className="text-xs font-bold uppercase tracking-wider block">📋 3. Tabel Rincian Barang & Foto</label>
+                <div className="space-y-3 border-t border-sky-100/80 pt-5">
+                  <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider block">📋 3. Tabel Rincian Barang & Foto</label>
                   {itemsRincian.map((item, idx) => (
-                    <div key={idx} className="p-4 rounded-2xl bg-[#F4F8FC]/60 border border-sky-100 space-y-3">
-                      <div className="flex justify-between items-center border-b border-sky-100 pb-2">
+                    <div key={idx} className="p-4 rounded-2xl bg-[#F4F8FC]/50 border border-sky-100/80 space-y-3">
+                      <div className="flex justify-between items-center border-b border-sky-100/80 pb-2">
                         <span className="text-xs font-bold text-sky-800">Rincian #{idx + 1}</span>
                         {itemsRincian.length > 1 && (
-                          <button type="button" onClick={() => removeRincian(idx)} className="text-rose-500 hover:text-rose-700 text-xs font-bold cursor-pointer">Hapus</button>
+                          <button type="button" onClick={() => removeRincian(idx)} className="text-rose-500 hover:text-rose-700 text-xs font-bold cursor-pointer transition-colors">Hapus</button>
                         )}
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="md:col-span-2">
-                          <label className="text-[11px] font-bold text-slate-500">Nama Barang</label>
-                          <input type="text" placeholder="Spesifikasi barang..." value={item.barang} onChange={e => handleRincianChange(idx, 'barang', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400 font-medium" />
+                          <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Barang</label>
+                          <input type="text" placeholder="Spesifikasi barang..." value={item.barang} onChange={e => handleRincianChange(idx, 'barang', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" />
                         </div>
                         <div>
-                          <label className="text-[11px] font-bold text-slate-500">Qty</label>
-                          <input type="number" value={item.qty} onChange={e => handleRincianChange(idx, 'qty', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400" />
+                          <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Qty</label>
+                          <input type="number" value={item.qty} onChange={e => handleRincianChange(idx, 'qty', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" />
                         </div>
                         <div>
-                          <label className="text-[11px] font-bold text-slate-500">Satuan</label>
-                          <input type="text" value={item.satuan} onChange={e => handleRincianChange(idx, 'satuan', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400" />
+                          <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Satuan</label>
+                          <input type="text" value={item.satuan} onChange={e => handleRincianChange(idx, 'satuan', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" />
                         </div>
                         <div>
-                          <label className="text-[11px] font-bold text-slate-500">Harga Satuan</label>
-                          <input type="number" value={item.harga_satuan} onChange={e => handleRincianChange(idx, 'harga_satuan', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400" />
+                          <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Harga Satuan</label>
+                          <input type="number" value={item.harga_satuan} onChange={e => handleRincianChange(idx, 'harga_satuan', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" />
                         </div>
                         <div>
-                          <label className="text-[11px] font-bold text-slate-500">Total</label>
-                          <input type="number" value={item.total} readOnly placeholder="Otomatis" className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs font-bold text-sky-700 bg-sky-50 focus:outline-none" />
+                          <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Total</label>
+                          <input type="number" value={item.total} readOnly placeholder="Otomatis" className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs font-bold text-sky-700 bg-sky-50 outline-none cursor-not-allowed" />
                         </div>
                         <div className="md:col-span-2 pt-1">
-                          <label className="text-[11px] font-bold text-slate-500 block mb-1">Foto Barang</label>
-                          <div className="flex flex-col gap-2 border border-sky-100 rounded-xl p-3 bg-white">
+                          <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider block mb-1">Foto Barang</label>
+                          <div className="flex flex-col gap-2 border border-sky-100/80 rounded-xl p-3 bg-white">
                             <input type="file" accept="image/*" disabled={!!item.foto_preview} onChange={e => e.target.files[0] && handleFoto(idx, e.target.files[0])} className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer disabled:opacity-50" />
                             {item.foto_preview && (
-                              <div className="relative w-24 h-24 mt-1">
-                                <img src={item.foto_preview} alt="Preview" className="w-full h-full object-cover rounded-xl border border-sky-200" />
-                                <button type="button" onClick={() => handleFoto(idx, null)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold cursor-pointer hover:bg-red-600 transition-colors">✕</button>
+                              <div className="relative w-20 h-20 mt-1">
+                                <img src={item.foto_preview} alt="Preview" className="w-full h-full object-cover rounded-xl border border-sky-200 shadow-xs" />
+                                <button type="button" onClick={() => handleFoto(idx, null)} className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md transition-all cursor-pointer transform hover:scale-110">✕</button>
                               </div>
                             )}
                           </div>
@@ -463,62 +480,71 @@ function DraftTorBarang() {
                     </div>
                   ))}
                   <div className="flex justify-end">
-                    <button type="button" onClick={addRincian} className="bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold px-4 py-2 rounded-xl text-xs border border-sky-200 cursor-pointer transition-all">+ Tambah Baris</button>
+                    <button type="button" onClick={addRincian} className="bg-sky-50/80 hover:bg-sky-100 text-sky-700 font-bold px-4 py-2 rounded-xl text-xs border border-sky-100/80 transition-all cursor-pointer transform hover:scale-105 active:scale-95 shadow-xs">+ Tambah Baris</button>
                   </div>
                 </div>
 
                 {/* 4. Penandatangan */}
-                <div className="space-y-4 border-t border-sky-100 pt-5">
-                  <label className="text-xs font-bold uppercase tracking-wider block">✍️ 4. Penandatangan / Pengesahan</label>
-                  <div className="p-4 rounded-2xl bg-[#F4F8FC]/60 border border-sky-100 space-y-3">
+                <div className="space-y-3 border-t border-sky-100/80 pt-5">
+                  <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider block">✍️ 4. Penandatangan / Pengesahan</label>
+                  <div className="p-4 rounded-2xl bg-[#F4F8FC]/50 border border-sky-100/80 space-y-3">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div className="relative">
-                        <label className="text-[11px] font-bold text-slate-500">Nama Penyerah</label>
-                        <input type="text" name="nama_penyerah" value={formData.nama_penyerah} onChange={handleFormChange} onFocus={() => setActiveDropdown('penyerah')} onBlur={() => setTimeout(() => setActiveDropdown(null), 200)} placeholder="Ketik nama penyerah..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400 font-medium" autoComplete="off" />
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Penyerah</label>
+                        <input type="text" name="nama_penyerah" value={formData.nama_penyerah} onChange={handleFormChange} onFocus={() => setActiveDropdown('penyerah')} onBlur={() => setTimeout(() => setActiveDropdown(null), 200)} placeholder="Ketik nama penyerah..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" autoComplete="off" />
                         {renderKaryawanDropdown('penyerah', formData.nama_penyerah)}
                       </div>
                       <div>
-                        <label className="text-[11px] font-bold text-slate-500">Bidang Penyerah</label>
-                        <input type="text" name="bidang1" value={formData.bidang1} onChange={handleFormChange} placeholder="Terisi otomatis / masukkan bidang..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400 font-medium" />
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Bidang Penyerah</label>
+                        <input type="text" name="bidang1" value={formData.bidang1} onChange={handleFormChange} placeholder="Terisi otomatis / masukkan bidang..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" />
                       </div>
                       <div className="relative">
-                        <label className="text-[11px] font-bold text-slate-500">Nama Penerima</label>
-                        <input type="text" name="nama_penerima" value={formData.nama_penerima} onChange={handleFormChange} onFocus={() => setActiveDropdown('penerima')} onBlur={() => setTimeout(() => setActiveDropdown(null), 200)} placeholder="Ketik nama penerima..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400 font-medium" autoComplete="off" />
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Penerima</label>
+                        <input type="text" name="nama_penerima" value={formData.nama_penerima} onChange={handleFormChange} onFocus={() => setActiveDropdown('penerima')} onBlur={() => setTimeout(() => setActiveDropdown(null), 200)} placeholder="Ketik nama penerima..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" autoComplete="off" />
                         {renderKaryawanDropdown('penerima', formData.nama_penerima)}
                       </div>
                       <div>
-                        <label className="text-[11px] font-bold text-slate-500">Bidang Penerima</label>
-                        <input type="text" name="bidang2" value={formData.bidang2} onChange={handleFormChange} placeholder="Terisi otomatis / masukkan bidang..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-sky-400 font-medium" />
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Bidang Penerima</label>
+                        <input type="text" name="bidang2" value={formData.bidang2} onChange={handleFormChange} placeholder="Terisi otomatis / masukkan bidang..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" />
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* ACTION BUTTONS */}
-                <div className="grid grid-cols-2 gap-3 pt-2">
+                {/* ACTION BUTTONS DENGAN STYLE KONSISTEN */}
+                <div className="pt-6 border-t border-sky-100/80 flex flex-wrap justify-end gap-3">
                   <button 
                     type="button" 
                     onClick={handleSaveDraft} 
                     disabled={loading} 
-                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-2xl text-xs transition-all border border-slate-200 cursor-pointer disabled:bg-slate-100 disabled:opacity-50"
+                    className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
                   >
-                    💾 Simpan ke Draft
+                    {loading ? "Menyimpan..." : "📁 Simpan Draft"}
                   </button>
                   <button 
                     type="submit" 
                     disabled={loading} 
-                    className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 rounded-2xl text-xs transition-all shadow-md cursor-pointer disabled:bg-slate-300"
+                    className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
                   >
-                    {loading ? "Memproses..." : "Selesai"}
+                    {loading ? "Memproses..." : "Selesai & Kirim Ke Antrean"}
                   </button>
                 </div>
+
               </form>
             </div>
 
-            {/* LIVE PREVIEW DOKUMEN */}
-            <div className="lg:col-span-5 bg-white rounded-3xl border border-sky-100 shadow-md p-6 sticky top-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-              <h3 className="text-xs font-bold uppercase tracking-wider mb-4 border-b pb-2">Live Preview Dokumen</h3>
-              <div className="space-y-6">
+            {/* LIVE PREVIEW DOKUMEN PANEL KANAN */}
+            <div className="lg:col-span-5 bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-6 sticky top-6 h-[calc(100vh-140px)] flex flex-col">
+              
+              <div className="flex items-center justify-between pb-4 border-b border-sky-100/80 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">📄</span>
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Live Document Preview</h3>
+                </div>
+                <span className="text-[10px] bg-sky-50 text-sky-600 font-bold px-2.5 py-1 rounded-full border border-sky-100">Auto Sync</span>
+              </div>
+
+              <div className="flex-1 overflow-y-auto border border-sky-100/80 rounded-2xl bg-white p-6 shadow-inner custom-scrollbar space-y-6">
                 <div>
                   <p className="font-bold text-xs">1. TUJUAN PENGADAAN</p>
                   <div className="p-3 border border-slate-900 rounded-lg bg-slate-50 text-[11px] font-mono break-words min-h-[42px] mt-1">{formData.pengadaan || '${pengadaan}'}</div>
@@ -615,6 +641,7 @@ function DraftTorBarang() {
 
               </div>
             </div>
+
           </div>
         </div>
       </main>

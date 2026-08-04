@@ -89,7 +89,7 @@ function Sidebar() {
             className={getMenuClass(isDashboard)}
           >
             <span className="text-base">🏠</span>
-            <span>Statistik</span>
+            <span>Dashboard</span>
           </button>
           
           {/* TOMBOL FILE TEMPLATE */}

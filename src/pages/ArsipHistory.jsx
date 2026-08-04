@@ -433,89 +433,20 @@ function ArsipHistory() {
       <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full custom-scrollbar">
         <div className="w-full max-w-6xl mx-auto space-y-6">
           
-          {/* HEADER SEKSI */}
-          <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* HEADER SEKSI + SEARCH BAR DI SAMPING KANAN */}
+          <section className="flex items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-black text-slate-800 tracking-tight">
                 Arsip <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">& History Dokumen</span>
               </h1>
             </div>
-          </section>
 
-          {/* FILTER BAR & SEARCH CONTROLLER */}
-          <section className="bg-white p-3.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-            
-            {/* TAB KATEGORI */}
-            <div className="flex flex-wrap items-center gap-1.5 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60">
-              <button
-                type="button"
-                onClick={() => setActiveTab('ba_penyerahan')}
-                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                  activeTab === 'ba_penyerahan' 
-                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.03]' 
-                    : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
-                }`}
-              >
-                🤝 BA Penyerahan ({totalPenyerahan})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('ba_kerusakan')}
-                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                  activeTab === 'ba_kerusakan' 
-                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.03]' 
-                    : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
-                }`}
-              >
-                ⚠️ BA Kerusakan ({totalKerusakan})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('surat_tugas')}
-                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                  activeTab === 'surat_tugas' 
-                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.03]' 
-                    : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
-                }`}
-              >
-                💼 Surat Tugas ({totalSuratTugas})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('tor_barang')}
-                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                  activeTab === 'tor_barang' 
-                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.03]' 
-                    : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
-                }`}
-              >
-                📦 TOR Barang ({totalTorBarang})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('tor_jasa')}
-                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer transform active:scale-95 ${
-                  activeTab === 'tor_jasa' 
-                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.03]' 
-                    : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
-                }`}
-              >
-                🛠️ TOR Jasa ({totalTorJasa})
-              </button>
-            </div>
-
-            {/* KONTROL KANAN */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto justify-end">
-              
-              {/* TOMBOL TOGGLE HALAMAN AKTIF / NONAKTIF */}
+            {/* KONTROL KANAN (Toggle Aktif + Search Bar Pindah ke Atas) */}
+            <div className="flex items-center gap-3">
               <button 
                 type="button"
                 onClick={() => setStatusFilter(statusFilter === '1' ? '0' : '1')}
-                className={`flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold rounded-2xl border transition-all duration-300 shadow-2xs hover:shadow-md cursor-pointer whitespace-nowrap active:scale-95 ${
+                className={`flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-extrabold rounded-2xl border transition-all duration-300 shadow-2xs hover:shadow-md cursor-pointer whitespace-nowrap active:scale-95 ${
                   statusFilter === '1' 
                     ? 'bg-rose-50/80 border-rose-100 text-rose-500 hover:bg-rose-500 hover:text-white hover:border-transparent' 
                     : 'bg-emerald-50/80 border-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white hover:border-transparent'
@@ -524,17 +455,42 @@ function ArsipHistory() {
                 {statusFilter === '1' ? '🚫 Lihat Arsip Nonaktif' : '👥 Lihat Arsip Aktif'}
               </button>
 
-              {/* PENCARIAN */}
-              <div className="relative max-w-xs w-full">
+              <div className="relative w-64">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-sky-400 text-xs">🔍</span>
                 <input 
                   type="text" 
                   placeholder="Cari nama dokumen..." 
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-[#F4F8FC]/80 border border-sky-100 rounded-2xl text-xs font-medium text-slate-700 placeholder:text-slate-300 focus:outline-none focus:border-sky-400 focus:bg-white focus:ring-2 focus:ring-sky-100 transition-all shadow-2xs"
+                  className="w-full pl-9 pr-4 py-2.5 bg-white border border-sky-100/90 rounded-2xl text-xs font-medium text-slate-700 placeholder:text-slate-300 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100/60 transition-all shadow-xs"
                 />
               </div>
+            </div>
+          </section>
+
+          {/* FILTER BAR TAB KATEGORI (Rapih & Tanpa Scroll/Geser) */}
+          <section className="bg-white p-2.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50">
+            <div className="grid grid-cols-5 gap-2 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60 w-full">
+              {[
+                { id: 'ba_penyerahan', label: `🤝 BA Penyerahan (${totalPenyerahan})` },
+                { id: 'ba_kerusakan', label: `⚠️ BA Kerusakan (${totalKerusakan})` },
+                { id: 'surat_tugas', label: `💼 Surat Tugas (${totalSuratTugas})` },
+                { id: 'tor_barang', label: `📦 TOR Barang (${totalTorBarang})` },
+                { id: 'tor_jasa', label: `🛠️ TOR Jasa (${totalTorJasa})` }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`py-2.5 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer text-center truncate active:scale-95 ${
+                    activeTab === tab.id 
+                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.02]' 
+                      : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
           </section>
 

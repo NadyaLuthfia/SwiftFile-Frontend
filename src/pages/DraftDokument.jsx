@@ -158,27 +158,37 @@ function DraftDokumen() {
       <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full custom-scrollbar">
         <div className="w-full max-w-6xl mx-auto space-y-6">
           
-          {/* HEADER SEKSI */}
-          <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* HEADER SEKSI + SEARCH BAR DI SAMPING KANAN */}
+          <section className="flex items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-black text-slate-800 tracking-tight">
                 Draft <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">{kategoriAktif}</span>
               </h1>
             </div>
+
+            {/* INPUT PENCARIAN (Pindah ke Atas Sejajar Judul) */}
+            <div className="relative w-72">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-sky-400 text-xs">🔍</span>
+              <input 
+                type="text"
+                placeholder="Cari nama draft..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 bg-white border border-sky-100/90 rounded-2xl text-xs font-medium text-slate-700 placeholder:text-slate-300 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100/60 transition-all shadow-xs"
+              />
+            </div>
           </section>
 
-          {/* FILTER BAR & SEARCH CONTROLLER */}
-          <section className="bg-white p-3.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            
-            {/* TAB KATEGORI */}
-            <div className="flex items-center gap-1.5 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60 overflow-x-auto custom-scrollbar">
+          {/* FILTER BAR TAB KATEGORI (Rapih & Tanpa Scroll/Geser) */}
+          <section className="bg-white p-2.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50">
+            <div className="grid grid-cols-5 gap-2 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60 w-full">
               {['Kerusakan', 'Penyerahan', 'Surat Tugas', 'Tor Barang', 'Tor Jasa'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setKategoriAktif(tab)}
-                  className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer whitespace-nowrap transform active:scale-95 ${
+                  className={`py-2.5 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer text-center truncate active:scale-95 ${
                     kategoriAktif === tab 
-                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.03]' 
+                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.02]' 
                       : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
                   }`}
                 >
@@ -193,18 +203,6 @@ function DraftDokumen() {
                     : '🛠️ TOR Jasa'}
                 </button>
               ))}
-            </div>
-
-            {/* INPUT PENCARIAN */}
-            <div className="relative max-w-xs w-full">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-sky-400 text-xs">🔍</span>
-              <input 
-                type="text"
-                placeholder="Cari nama draft..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-[#F4F8FC]/80 border border-sky-100 rounded-2xl text-xs font-medium text-slate-700 placeholder:text-slate-300 focus:outline-none focus:border-sky-400 focus:bg-white focus:ring-2 focus:ring-sky-100 transition-all shadow-2xs"
-              />
             </div>
           </section>
 
@@ -259,7 +257,7 @@ function DraftDokumen() {
                   } else if (isTorBarang) {
                     targetRoute = '/draft-tor-barang';
                     teksBadge = '📦 TOR Barang';
-                    warnaBadge = 'bg-amber-50/90 text-amber-600 border border-amber-100';
+                    warnaBadge = 'bg-amber-50/90 text-amber-100 border border-amber-100';
                   } else if (isTorJasa) {
                     targetRoute = '/draft-tor-jasa';
                     teksBadge = '🛠️ TOR Jasa';

@@ -159,11 +159,6 @@ function SiapCetak() {
     });
   }, [antreanList, searchTerm, activeTab]);
 
-  const dapatkanWarnaTab = (tabName) => {
-    if (activeTab !== tabName) return 'border-transparent text-slate-400 hover:text-slate-600';
-    return 'border-sky-500 text-sky-600 font-black';
-  };
-
   const formatTanggalIndo = (dateStr) => {
     if (!dateStr) return '-';
     const d = new Date(dateStr);
@@ -196,67 +191,52 @@ function SiapCetak() {
       <main className="flex-1 flex flex-col px-8 py-8 overflow-y-auto h-full custom-scrollbar">
         <div className="w-full max-w-6xl mx-auto space-y-6">
           
-          {/* HEADER SECTION */}
-          <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* HEADER SEKSI + SEARCH BAR DI SAMPING KANAN */}
+          <section className="flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-black text-slate-800 tracking-tight mt-0.5">
-                Antrean <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">Proses Berkas</span>
+              <h1 className="text-3xl font-black text-slate-800 tracking-tight">
+                Antrean <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">Proses Berkas</span>
               </h1>
             </div>
 
-            {/* SEARCH BAR */}
-            <div className="relative max-w-xs w-full">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 text-sm">
-                🔍
-              </span>
+            {/* INPUT PENCARIAN (Pindah ke Atas Sejajar Judul) */}
+            <div className="relative w-72">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-sky-400 text-xs">🔍</span>
               <input 
                 type="text"
                 placeholder="Cari berkas di tab ini..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-white border border-sky-100 rounded-2xl text-xs font-medium shadow-xs focus:outline-none focus:border-sky-400 transition-all"
+                className="w-full pl-9 pr-4 py-2.5 bg-white border border-sky-100/90 rounded-2xl text-xs font-medium text-slate-700 placeholder:text-slate-300 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100/60 transition-all shadow-xs"
               />
             </div>
           </section>
 
-          {/* NAVIGASI 5 TAB */}
-          <div className="flex border-b border-sky-100 gap-2 overflow-x-auto custom-scrollbar">
-            <button
-              type="button"
-              onClick={() => setActiveTab('ba_penyerahan')}
-              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative whitespace-nowrap ${dapatkanWarnaTab('ba_penyerahan')}`}
-            >
-              📄 BA Penyerahan
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('ba_kerusakan')}
-              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative whitespace-nowrap ${dapatkanWarnaTab('ba_kerusakan')}`}
-            >
-              ⚠️ BA Kerusakan
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('surat_tugas')}
-              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative whitespace-nowrap ${dapatkanWarnaTab('surat_tugas')}`}
-            >
-              💼 Surat Tugas
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('tor_barang')}
-              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative whitespace-nowrap ${dapatkanWarnaTab('tor_barang')}`}
-            >
-              📦 TOR Barang
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('tor_jasa')}
-              className={`pb-3 px-4 text-xs font-bold tracking-wide transition-all border-b-2 relative whitespace-nowrap ${dapatkanWarnaTab('tor_jasa')}`}
-            >
-              🛠️ TOR Jasa
-            </button>
-          </div>
+          {/* FILTER BAR TAB KATEGORI (Rapih & Tanpa Scroll/Geser) */}
+          <section className="bg-white p-2.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50">
+            <div className="grid grid-cols-5 gap-2 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60 w-full">
+              {[
+                { id: 'ba_penyerahan', label: '🤝 BA Penyerahan' },
+                { id: 'ba_kerusakan', label: '⚠️ BA Kerusakan' },
+                { id: 'surat_tugas', label: '💼 Surat Tugas' },
+                { id: 'tor_barang', label: '📦 TOR Barang' },
+                { id: 'tor_jasa', label: '🛠️ TOR Jasa' }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`py-2.5 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer text-center truncate active:scale-95 ${
+                    activeTab === tab.id 
+                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.02]' 
+                      : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </section>
 
           {/* MAIN DISPLAY DATA BOARD */}
           {loading ? (
@@ -287,8 +267,16 @@ function SiapCetak() {
                       // Mengambil variabel khusus dari form / data_input
                       const namaItem = dapatkanValueSakti(file, 'ITEM') || dapatkanValueSakti(file, 'NO_ITEM');
                       const namaAlat = dapatkanValueSakti(file, 'NAMA_ALAT') || dapatkanValueSakti(file, 'NAMA_BARANG') || dapatkanValueSakti(file, 'ITEM');
-                      const namaKegiatan = dapatkanValueSakti(file, 'KEGIATAN') || dapatkanValueSakti(file, 'NAMA_KEGIATAN') || dapatkanValueSakti(file, 'PEKERJAAN');
                       
+                      // Dapatkan Nama Jasa / Kegiatan dengan prioritas Nama Jasa
+                      const namaJasaOrKegiatan = 
+                        dapatkanValueSakti(file, 'NAMA_JASA') || 
+                        dapatkanValueSakti(file, 'JASA') || 
+                        dapatkanValueSakti(file, 'KEGIATAN') || 
+                        dapatkanValueSakti(file, 'NAMA_KEGIATAN') || 
+                        dapatkanValueSakti(file, 'PEKERJAAN') || 
+                        dapatkanValueSakti(file, 'PENGADAAN');
+
                       // Ambil khusus tanggal berangkat dari variabel form
                       const tglBerangkatInput = 
                         dapatkanValueSakti(file, 'TANGGAL_BERANGKAT') || 
@@ -343,7 +331,7 @@ function SiapCetak() {
                                 {/* 5. TOR JASA */}
                                 {activeTab === 'tor_jasa' && (
                                   <p className="text-[10px] text-indigo-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
-                                    <span>🛠️ Kegiatan/Jasa: {namaKegiatan || namaItem || <span className="italic text-slate-400">[Tidak ada detail kegiatan]</span>}</span>
+                                    <span>🛠️ Kegiatan/Jasa: {namaJasaOrKegiatan || <span className="italic text-slate-400">[Tidak ada detail nama jasa]</span>}</span>
                                   </p>
                                 )}
 
