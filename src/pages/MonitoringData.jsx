@@ -3,6 +3,16 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import axios from 'axios';
 
+// HELPER FORMAT TANGGAL: Mengubah "2026-08-19 23:54:09" jadi "19 Agustus 2026"
+const formatTanggalIndo = (dateString) => {
+  if (!dateString) return null;
+  const safeDateString = dateString.replace(' ', 'T'); 
+  const date = new Date(safeDateString);
+  const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  
+  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+};
+
 function MonitoringData() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,7 +58,7 @@ function MonitoringData() {
     }
   };
 
-  // 🚀 FUNGSI CETAK FISIK: GENERATE PDF & BUKA TAB BARU
+  // 🚀 FUNGSI CETAK FISIK: GENERATE PDF & BUKA TAB BARU (DENGAN REFRESH)
   const handlePrintFisik = async (id) => {
     setPrintingId(id);
     const token = localStorage.getItem('token');
@@ -66,6 +76,8 @@ function MonitoringData() {
 
       if (response.data && response.data.pdf_url) {
         window.open(response.data.pdf_url, '_blank');
+        // REFRESH DATA OTOMATIS BIAR TANGGAL CETAK LANGSUNG MUNCUL
+        fetchAllFilesForMonitoring();
       } else {
         alert("🎉 Dokumen berhasil diproses, namun URL PDF tidak ditemukan.");
       }
@@ -87,6 +99,63 @@ function MonitoringData() {
     const urlLengkap = pathFile.startsWith('http') ? pathFile : `http://localhost:8000/${pathFile}`;
     
     window.open(urlLengkap, '_blank');
+  };
+
+  // 🟢 FUNGSI UNTUK MENGUBAH STATUS AKTIF/NONAKTIF
+  const handleToggleStatus = async (id) => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await axios.post(`${BASE_URL}/monitoring/${id}/toggle-status`, {}, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.data.status === 'success') {
+        // Update state fileList secara lokal biar UI langsung berubah instan
+        setFileList(prevList => prevList.map(file => {
+          if (file.id === id) {
+            return { ...file, status_aktif: response.data.new_status };
+          }
+          return file;
+        }));
+      }
+    } catch (error) {
+      console.error("Gagal mengubah status:", error);
+      alert("Terjadi kesalahan saat mengubah status dokumen.");
+    }
+  };
+
+  // 🔴 FUNGSI UNTUK MENGHAPUS DOKUMEN PERMANEN (HANYA MASTER ADMIN)
+  const handleDeleteFile = async (id) => {
+    const confirmDelete = window.confirm(
+      "⚠️ PERINGATAN: Apakah Anda yakin ingin menghapus dokumen ini secara permanen?\n\nFile fisik dan data di database akan dihapus total dan tidak dapat dikembalikan."
+    );
+    
+    if (!confirmDelete) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await axios.delete(`${BASE_URL}/monitoring/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.data.status === 'success') {
+        setFileList(prevList => prevList.filter(file => file.id !== id));
+        alert("✅ Dokumen berhasil dihapus secara permanen.");
+      } else {
+        alert("Gagal menghapus dokumen: " + (response.data.message || "Kesalahan server."));
+      }
+    } catch (error) {
+      console.error("Gagal menghapus dokumen:", error);
+      alert("Terjadi kesalahan sistem saat menghapus dokumen. Pastikan endpoint Delete tersedia di backend.");
+    }
   };
 
   useEffect(() => {
@@ -174,13 +243,13 @@ function MonitoringData() {
   const filteredFiles = useMemo(() => {
     return fileList.filter((file) => {
       const query = searchQuery.toLowerCase();
-      const matchNamaDokumen = file.nama_dokumen?.toLowerCase().includes(query);
+      const matchNamaDokumen = (file.nama_dokumen || file.nomor_dokumen || '').toLowerCase().includes(query);
       const matchPembuat = file.nama_pembuat?.toLowerCase().includes(query);
       const matchSearch = matchNamaDokumen || matchPembuat;
       const matchRole = selectedRole === '' || file.user?.role === selectedRole;
 
       return matchSearch && matchRole;
-    }).slice(0, 30); // Memastikan maksimal 30 item terbaru yang dirender
+    }).slice(0, 30);
   }, [fileList, searchQuery, selectedRole]);
 
   // Deteksi Surat Tugas untuk Modal
@@ -363,13 +432,15 @@ function MonitoringData() {
               <div className="hidden md:flex items-center justify-between bg-[#F4F8FC] px-6 py-3 rounded-2xl text-[10px] font-extrabold text-sky-600 uppercase tracking-wider">
                 <div className="flex-1">DETAIL NAMA BERKAS</div>
                 <div className="w-36 text-center shrink-0">ROLE</div>
-                <div className="shrink-0 text-right w-52">TINDAKAN</div>
+                <div className="shrink-0 text-right w-[280px]">TINDAKAN</div> 
               </div>
 
               {/* LIST CARD ROWS PER BERKAS */}
               <div className="space-y-3">
                 {filteredFiles.map((file) => {
                   const isHighlighted = targetHighlightId !== null && file.id === targetHighlightId;
+                  
+                  const isActive = file.status_aktif == 1 || file.status_aktif === '1' || file.status_aktif === null || file.status_aktif === undefined;
 
                   return (
                     <div 
@@ -390,17 +461,35 @@ function MonitoringData() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <p 
-                              className={`font-bold transition-colors cursor-pointer text-xs truncate max-w-[320px] ${
-                                isHighlighted ? 'text-emerald-900 font-extrabold' : 'text-slate-800 hover:text-sky-600'
-                              }`} 
+                            
+                            <div 
+                              className="flex flex-col cursor-pointer group"
                               onClick={() => setSelectedFileForModal(file)}
-                              title={file.nama_dokumen}
+                              title={file.nama_dokumen || file.nomor_dokumen}
                             >
-                              {file.nama_dokumen}
-                            </p>
+                              {(() => {
+                                const rawNomor = file.nama_dokumen || file.nomor_dokumen || '';
+                                const splitStr = rawNomor.split(' - ');
+                                const judul = splitStr[0] || `Dokumen #${file.id}`;
+                                const nomor = splitStr[1] || rawNomor;
 
-                            {/* BADGE POP-UP GLOW HIJAU */}
+                                return (
+                                  <>
+                                    <p className={`text-sm font-black transition-colors truncate max-w-[320px] ${
+                                      isHighlighted ? 'text-emerald-900' : 'text-sky-600 group-hover:text-sky-400'
+                                    }`}>
+                                      {judul}
+                                    </p>
+                                    {nomor && judul !== nomor && (
+                                      <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
+                                        No. Dokumen: <span className="text-slate-700">{nomor}</span>
+                                      </p>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+
                             {isHighlighted && (
                               <span className="text-[9px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-md uppercase tracking-wider animate-bounce shadow-xs">
                                 🟢 DITANDAI DARI DASHBOARD
@@ -408,7 +497,6 @@ function MonitoringData() {
                             )}
                           </div>
                           
-                          {/* RINCIAN DINAMIS */}
                           <div className="flex items-center gap-2 mt-1">
                             {renderDetailDynamic(file)}
 
@@ -418,6 +506,11 @@ function MonitoringData() {
                               👤 {file.nama_pembuat}
                             </span>
                           </div>
+
+                          {/* MENAMPILKAN TANGGAL CETAK TERAKHIR */}
+                          <p className="text-[10px] text-emerald-600 font-bold mt-1.5 flex items-center gap-1 truncate max-w-[320px]">
+                            <span>🖨️ Tanggal Cetak Terakhir: {file.tanggal_cetak ? formatTanggalIndo(file.tanggal_cetak) : <span className="italic text-slate-400 font-normal">Belum pernah dicetak</span>}</span>
+                          </p>
                         </div>
                       </div>
 
@@ -432,7 +525,7 @@ function MonitoringData() {
                       </div>
 
                       {/* 3. TINDAKAN */}
-                      <div className="shrink-0 flex items-center justify-end gap-2 w-52">
+                      <div className="shrink-0 flex items-center justify-end gap-2 w-[280px]">
                         <button
                           type="button"
                           disabled={printingId === file.id}
@@ -443,14 +536,29 @@ function MonitoringData() {
                         </button>
 
                         {userRole === 'master_admin' && (
-                          <button 
-                            type="button"
-                            onClick={() => alert('Arsip dinonaktifkan')}
-                            className="bg-rose-50 border border-rose-100 text-rose-500 hover:bg-rose-500 hover:text-white px-2.5 py-2 rounded-xl transition-all cursor-pointer font-bold text-[11px] flex items-center gap-1 shadow-2xs whitespace-nowrap active:scale-95"
-                            title="Nonaktifkan Dokumen"
-                          >
-                            🚫 Nonaktif
-                          </button>
+                          <>
+                            <button 
+                              type="button"
+                              onClick={() => handleToggleStatus(file.id)}
+                              className={`px-2.5 py-2 rounded-xl transition-all cursor-pointer font-bold text-[11px] flex items-center gap-1 shadow-2xs whitespace-nowrap active:scale-95 ${
+                                isActive 
+                                  ? 'bg-rose-50 border border-rose-100 text-rose-500 hover:bg-rose-500 hover:text-white' 
+                                  : 'bg-emerald-50 border border-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white'
+                              }`}
+                              title={isActive ? "Nonaktifkan Dokumen" : "Aktifkan Dokumen"}
+                            >
+                              {isActive ? '🚫 Nonaktifkan' : '✅ Aktifkan'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteFile(file.id)}
+                              className="bg-red-50 hover:bg-red-500 text-red-600 hover:text-white border border-red-200 px-3 py-2 rounded-xl text-[12px] transition-all shadow-2xs cursor-pointer flex items-center justify-center active:scale-95"
+                              title="Hapus Dokumen Secara Permanen"
+                            >
+                              🗑️
+                            </button>
+                          </>
                         )}
                       </div>
 

@@ -9,6 +9,9 @@ function DraftTorBarang() {
   const templateId = searchParams.get('template_id');
   const draftId = searchParams.get('draft_id') || searchParams.get('id'); // ID untuk mode edit
 
+  // 👇 1. State baru untuk simpan templateId yang ditarik dari backend 👇
+  const [savedTemplateId, setSavedTemplateId] = useState(templateId || '');
+
   const [loading, setLoading] = useState(false);
   const [daftarPegawai, setDaftarPegawai] = useState([]);
   const [activeDropdown, setActiveDropdown] = useState(null); // 'penyerah' | 'penerima' | null
@@ -34,9 +37,9 @@ function DraftTorBarang() {
     jumlah_harga: ''
   });
 
-  // State Tabel Rincian Barang & Foto
+  // State Tabel Rincian Barang & Foto (Ditambahkan foto_path untuk simpanan JSON)
   const [itemsRincian, setItemsRincian] = useState([
-    { barang: '', foto_file: null, foto_preview: null, qty: '1', satuan: 'Pcs', harga_satuan: '', total: '' }
+    { barang: '', foto_file: null, foto_preview: null, foto_path: '', qty: '1', satuan: 'Pcs', harga_satuan: '', total: '' }
   ]);
 
   // 1. Fetch Data Karyawan / Pegawai
@@ -69,6 +72,11 @@ function DraftTorBarang() {
         });
 
         const data = res.data.data || res.data;
+
+        // 👇 2. Ambil template_id dari draft lama kalau ada 👇
+        if (data.template_id) {
+          setSavedTemplateId(data.template_id);
+        }
         
         // Pembacaan fleksibel baik dari 'data_input' (drafts) maupun 'variables' (dokumen_cetak)
         let input = data.data_input || data.variables || {};
@@ -97,19 +105,62 @@ function DraftTorBarang() {
           jumlah_harga: String(data.jumlah_harga || input.jumlah_harga || data.item_barang?.jumlah_harga || '')
         });
 
-        // Fill Tabel Rincian & Foto
-        const rincian = data.rincian_barang || input.rincian_barang || data.rincian || [];
-        if (Array.isArray(rincian) && rincian.length > 0) {
-          setItemsRincian(rincian.map(r => ({
-            barang: r.barang || r.nama_barang || '',
-            foto_file: null,
-            foto_preview: r.foto ? (r.foto.startsWith('http') ? r.foto : `http://localhost:8000/storage/${r.foto}`) : null,
-            qty: String(r.qty || '1'),
-            satuan: r.satuan || 'Pcs',
-            harga_satuan: String(r.harga_satuan || ''),
-            total: String(r.total || '')
-          })));
+        // ======= 🚀 PERBAIKAN TOTAL TARIK FOTO DARI DATABASE =======
+        
+        // 1. Ambil data foto dari root 'data.foto', 'input.foto', atau 'data.foto_lama'
+        let savedPhotos = [];
+        try {
+          const rawPhotos = data.foto || input.foto || data.foto_lama || data.lampiran;
+          if (typeof rawPhotos === 'string') {
+            savedPhotos = JSON.parse(rawPhotos);
+          } else if (Array.isArray(rawPhotos)) {
+            savedPhotos = rawPhotos;
+          }
+        } catch (e) {
+          console.error("Gagal parse foto:", e);
         }
+
+        // 2. Fill Tabel Rincian & Pasangkan Foto berdasarkan Index
+        const rincian = data.rincian_barang || input.rincian_barang || data.rincian || [];
+        
+        if (Array.isArray(rincian) && rincian.length > 0) {
+          setItemsRincian(rincian.map((r, index) => {
+            
+            // Ambil path dari array foto utama berdasarkan indeks, atau dari r.foto
+            let photoObjOrString = savedPhotos[index] || r.foto || r.foto_path || null;
+            let pathString = '';
+            let previewUrl = null;
+
+            if (typeof photoObjOrString === 'object' && photoObjOrString !== null) {
+              pathString = photoObjOrString.path || '';
+            } else if (typeof photoObjOrString === 'string') {
+              pathString = photoObjOrString;
+            }
+
+            if (pathString) {
+              // Bersihkan backslash dari format JSON
+              const cleanPath = pathString.replace(/\\/g, '/').replace(/^\//, '');
+
+              // Hapus penambahan 'storage/' yang paksa. Langsung gabungkan URL.
+              previewUrl = cleanPath.startsWith('http')
+                ? cleanPath
+                : `http://localhost:8000/${cleanPath}`;
+            }
+
+            return {
+              barang: r.barang || r.nama_barang || '',
+              foto_file: null, 
+              foto_preview: previewUrl, 
+              foto_path: pathString, // Amannya jalur string path tersimpan di sini
+              qty: String(r.qty || '1'),
+              satuan: r.satuan || 'Pcs',
+              harga_satuan: String(r.harga_satuan || ''),
+              total: String(r.total || '')
+            };
+          }));
+        }
+        // ======= 🚀 PERBAIKAN SELESAI =======
+
       } catch (err) {
         console.error("Gagal mengambil detail draft lama:", err);
       } finally {
@@ -168,12 +219,15 @@ function DraftTorBarang() {
     }
     updated[index].foto_file = file;
     updated[index].foto_preview = file ? URL.createObjectURL(file) : null;
+    if (!file) {
+      updated[index].foto_path = '';
+    }
     setItemsRincian(updated);
   };
 
   const addRincian = () => setItemsRincian([
     ...itemsRincian, 
-    { barang: '', foto_file: null, foto_preview: null, qty: '1', satuan: 'Pcs', harga_satuan: '', total: '' }
+    { barang: '', foto_file: null, foto_preview: null, foto_path: '', qty: '1', satuan: 'Pcs', harga_satuan: '', total: '' }
   ]);
   
   const removeRincian = (index) => {
@@ -190,21 +244,30 @@ function DraftTorBarang() {
     return acc;
   }, []);
 
-  // HELPER FORM DATA PAYLOAD
+  // ======= 🚀 PERBAIKAN: HELPER FORM DATA PAYLOAD =======
   const createFormDataPayload = (status = 'draft') => {
     const data = new FormData();
-    data.append('template_id', templateId || '');
+    
+    // 1. Set Template ID & Status
+    data.append('template_id', savedTemplateId);
     data.append('status', status);
 
-    if (draftId) {
+    // 2. Set Nama Draft & Nama Dokumen (Sinkron dengan backend)
+    const namaDraftValue = formData.nama_draft.trim() 
+      || (itemBarang.nama_barang ? `TOR - ${itemBarang.nama_barang}` : 'Draft TOR Barang');
+    
+    data.append('nama_draft', namaDraftValue);
+    data.append('nama_dokumen', namaDraftValue); // 👈 Penambahan properti nama_dokumen
+
+    // 3. KUNCI PERBAIKAN BUG:
+    // Hanya masukkan draft_id dan _method PUT jika statusnya BENAR-BENAR 'draft'.
+    // Jika statusnya 'siap_cetak', JANGAN kirim draft_id agar backend tidak menghapus file/draft duluan.
+    if (draftId && status === 'draft') {
       data.append('draft_id', draftId);
       data.append('_method', 'PUT');
     }
 
-    const namaDraftValue = formData.nama_draft.trim() 
-      || (itemBarang.nama_barang ? `TOR - ${itemBarang.nama_barang}` : 'Draft TOR Barang');
-    data.append('nama_draft', namaDraftValue);
-
+    // BENTUK JSON VARIABLES YANG DISIMPAN KE DATABASE
     const variablesObject = {
       nama_draft: namaDraftValue,
       pengadaan: formData.pengadaan,
@@ -225,89 +288,122 @@ function DraftTorBarang() {
         qty: item.qty,
         satuan: item.satuan,
         harga_satuan: item.harga_satuan,
-        total: item.total
+        total: item.total,
+        foto: item.foto_path || '' 
       }))
     };
 
     data.append('variables', JSON.stringify(variablesObject));
 
+    // Append raw data for backend
     Object.keys(formData).forEach(key => {
-      if (key !== 'nama_draft') data.append(key, formData[key]);
+      if (key !== 'nama_draft') data.append(key, formData[key] ?? '');
     });
 
-    Object.keys(itemBarang).forEach(key => data.append(key, itemBarang[key]));
+    Object.keys(itemBarang).forEach(key => data.append(key, itemBarang[key] ?? ''));
+
+    // Siapkan wadah untuk mengumpulkan path foto lama
+    const fotoLamaArray = [];
 
     itemsRincian.forEach((item, index) => {
-      data.append(`rincian_barang[${index}][barang]`, item.barang);
-      data.append(`rincian_barang[${index}][qty]`, item.qty);
-      data.append(`rincian_barang[${index}][satuan]`, item.satuan);
-      data.append(`rincian_barang[${index}][harga_satuan]`, item.harga_satuan);
-      data.append(`rincian_barang[${index}][total]`, item.total);
+      // Append text data rincian barang
+      data.append(`rincian_barang[${index}][barang]`, item.barang ?? '');
+      data.append(`rincian_barang[${index}][qty]`, item.qty ?? '');
+      data.append(`rincian_barang[${index}][satuan]`, item.satuan ?? '');
+      data.append(`rincian_barang[${index}][harga_satuan]`, item.harga_satuan ?? '');
+      data.append(`rincian_barang[${index}][total]`, item.total ?? '');
       
       if (item.foto_file) {
-        data.append(`rincian_barang[${index}][foto]`, item.foto_file);
+        // Kirim file fisik baru
+        data.append(`foto[]`, item.foto_file); 
+      } else if (item.foto_path) {
+        // Kumpulkan path foto lama
+        fotoLamaArray.push({
+          path: item.foto_path,
+          keterangan: 'Foto Lampiran'
+        });
       }
     });
 
+    // Kirim foto lama sebagai JSON String
+    if (fotoLamaArray.length > 0) {
+      data.append('foto_lama', JSON.stringify(fotoLamaArray));
+    }
+
     return data;
   };
+  // ======= 🚀 SELESAI PERBAIKAN PAYLOAD =======
 
   // Submit Simpan Ke Draft
-  const handleSaveDraft = async () => {
+  const handleSaveDraft = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     setLoading(true);
-    try {
-      const payload = createFormDataPayload('draft');
-      const token = localStorage.getItem('token');
-      
-      const endpoint = draftId ? `http://localhost:8000/api/drafts/${draftId}` : 'http://localhost:8000/api/drafts';
-      
-      await axios.post(endpoint, payload, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-
+    
+    // Kirim dengan parameter status 'draft'
+    const payload = createFormDataPayload('draft');
+    const token = localStorage.getItem('token');
+    
+    const endpoint = draftId ? `http://localhost:8000/api/drafts/${draftId}` : 'http://localhost:8000/api/drafts';
+    
+    axios({
+      method: 'post', 
+      url: endpoint,
+      data: payload,
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      }
+    })
+    .then(() => {
+      setLoading(false);
       alert("Dokumen berhasil disimpan ke draft!");
       navigate('/draft-dokumen');
-    } catch (err) {
+    })
+    .catch(err => {
       console.error("Gagal simpan draft:", err);
       const serverMsg = err.response?.data?.message || err.response?.data?.errors?.nama_draft?.[0];
       alert(serverMsg || "Gagal menyimpan ke draft.");
-    } finally {
       setLoading(false);
-    }
+    });
   };
 
-  // Submit Final
-  const handleSubmit = async (e) => {
+  // Submit Final Siap Cetak
+  const handleSubmit = (e) => {
     e.preventDefault();
     setLoading(true);
 
-    try {
-      const payload = createFormDataPayload('siap_cetak');
-      const token = localStorage.getItem('token');
+    // Kirim dengan parameter status 'siap_cetak'
+    const payload = createFormDataPayload('siap_cetak');
+    const token = localStorage.getItem('token');
 
-      const endpoint = draftId 
-        ? `http://localhost:8000/api/siap-cetak/${draftId}` 
-        : 'http://localhost:8000/api/siap-cetak';
-
-      await axios.post(endpoint, payload, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-
+    axios.post(`http://localhost:8000/api/siap-cetak`, payload, {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      }
+    })
+    .then(() => {
+      // 👇 DISAMAKAN DENGAN PENYERAHAN 👇
+      // Hapus draft HANYA SETELAH siap-cetak berhasil dibuat (Promise Chain)
+      if (draftId) {
+        return axios.delete(`http://localhost:8000/api/drafts/${draftId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+    })
+    .then(() => {
+      setLoading(false);
       alert("Dokumen berhasil diselesaikan dan masuk ke antrean siap cetak!");
       navigate('/siap-cetak');
-    } catch (err) {
+    })
+    .catch(err => {
       console.error("Gagal submit dokumen:", err);
       const serverMsg = err.response?.data?.message || err.response?.data?.errors?.variables?.[0] || err.response?.data?.errors?.nama_draft?.[0];
       alert(serverMsg || "Gagal menyelesaikan dokumen.");
-    } finally {
       setLoading(false);
-    }
+    });
   };
 
   // Dropdown Auto-complete Karyawan

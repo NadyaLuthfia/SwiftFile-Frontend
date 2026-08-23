@@ -11,6 +11,9 @@ function SiapCetak() {
   const [antreanList, setAntreanList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // State indikator loading khusus saat proses cetak/PDF berjalan per-baris
+  const [printingId, setPrintingId] = useState(null);
 
   // Helper untuk mengambil token autentikasi
   const getAuthConfig = useCallback(() => {
@@ -45,6 +48,9 @@ function SiapCetak() {
 
   // 3. AKSI: PRINT & UPDATE STATUS (Sekaligus Update Tanggal Cetak)
   const handlePrintAction = (id, namaDokumen) => {
+    // Kunci tombol cetak untuk baris dokumen ini
+    setPrintingId(id);
+
     axios.put(`${API_BASE_URL}/siap-cetak/${id}/status`, {
       copies: 1,
       pages: 'All'
@@ -68,29 +74,14 @@ function SiapCetak() {
       })
       .catch(err => {
         console.error("Gagal memperbarui status cetak:", err);
-      });
-  };
-
-  // 4. AKSI FINAL A: UNGGAH FOTO BUKTI TANDA TANGAN (BA Penyerahan & BA Kerusakan)
-  const handleUploadAction = (id, event) => {
-    const fileTarget = event.target.files[0];
-    if (!fileTarget) return;
-
-    const formData = new FormData();
-    formData.append('foto_ttd', fileTarget);
-
-    const config = getAuthConfig();
-
-    axios.post(`${API_BASE_URL}/siap-cetak/${id}/upload`, formData, config)
-      .then(() => {
-        ambilAntreanCetak(); 
       })
-      .catch(err => {
-        console.error("Detail Error Upload:", err.response ? err.response.data : err);
+      .finally(() => {
+        // Lepas kembali status loading tombol setelah selesai/gagal
+        setPrintingId(null);
       });
   };
 
-  // 5. AKSI FINAL B: KHUSUS SURAT TUGAS, TOR BARANG & TOR JASA (TANPA UPLOAD TTD)
+  // 4. AKSI FINAL: UNTUK SEMUA JENIS DOKUMEN (UBAH STATUS JADI SELESAI/ARSIP)
   const handleSelesaiTanpaTtd = (id) => {
     axios.post(`${API_BASE_URL}/siap-cetak/${id}/selesai`, {}, getAuthConfig())
       .then(() => {
@@ -199,7 +190,7 @@ function SiapCetak() {
               </h1>
             </div>
 
-            {/* INPUT PENCARIAN (Pindah ke Atas Sejajar Judul) */}
+            {/* INPUT PENCARIAN (Sejajar Judul) */}
             <div className="relative w-72">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-sky-400 text-xs">🔍</span>
               <input 
@@ -212,7 +203,7 @@ function SiapCetak() {
             </div>
           </section>
 
-          {/* FILTER BAR TAB KATEGORI (Rapih & Tanpa Scroll/Geser) */}
+          {/* FILTER BAR TAB KATEGORI (Grid 5 Kolom - Modern & Rapih) */}
           <section className="bg-white p-2.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50">
             <div className="grid grid-cols-5 gap-2 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60 w-full">
               {[
@@ -264,6 +255,9 @@ function SiapCetak() {
                     {daftarFileTerfilter.map((file) => {
                       const namaTampilan = file.nama_arsip_display || file.nama_dokumen;
                       
+                      // 🔍 Cek apakah dokumen ini sudah pernah di-print
+                      const isPrinted = Boolean(file.tanggal_cetak);
+
                       // Mengambil variabel khusus dari form / data_input
                       const namaItem = dapatkanValueSakti(file, 'ITEM') || dapatkanValueSakti(file, 'NO_ITEM');
                       const namaAlat = dapatkanValueSakti(file, 'NAMA_ALAT') || dapatkanValueSakti(file, 'NAMA_BARANG') || dapatkanValueSakti(file, 'ITEM');
@@ -350,37 +344,36 @@ function SiapCetak() {
                           <td className="py-3.5 px-4">
                             <div className="flex items-center justify-center gap-3">
                               
+                              {/* TOMBOL PRINT FISIK DENGAN LOADING STATE */}
                               <button 
                                 type="button"
+                                disabled={printingId === file.id}
                                 onClick={() => handlePrintAction(file.id, namaTampilan)} 
-                                className="bg-slate-800 text-white px-3.5 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider hover:bg-slate-900 transition-all shadow-xs hover:shadow-md cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                                className={`px-3.5 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap ${
+                                  printingId === file.id 
+                                    ? 'bg-slate-400 text-white cursor-not-allowed animate-pulse' 
+                                    : 'bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md cursor-pointer'
+                                }`}
                               >
-                                🖨️ PRINT FISIK
+                                {printingId === file.id ? '⏳ MEMPROSES PDF...' : '🖨️ PRINT FISIK'}
                               </button>
 
                               <span className="text-sky-200 text-sm font-light select-none">|</span>
 
-                              {/* JIKA SURAT TUGAS, TOR BARANG, ATAU TOR JASA -> PAKAI TOMBOL SELESAI */}
-                              {['surat_tugas', 'tor_barang', 'tor_jasa'].includes(activeTab) ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSelesaiTanpaTtd(file.id)}
-                                  className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700 transition-all shadow-xs hover:shadow-md cursor-pointer whitespace-nowrap flex items-center gap-1"
-                                >
-                                  ✅ SELESAI
-                                </button>
-                              ) : (
-                                /* UNTUK BA PENYERAHAN & BA KERUSAKAN -> TETAP PAKAI UPLOAD TTD */
-                                <label className="inline-block bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-xs shadow-sky-200 cursor-pointer whitespace-nowrap">
-                                  📤 UPLOAD TTD
-                                  <input 
-                                    type="file" 
-                                    className="hidden" 
-                                    accept="image/*"
-                                    onChange={(e) => handleUploadAction(file.id, e)} 
-                                  />
-                                </label>
-                              )}
+                              {/* 🌟 TOMBOL SELESAI DINAMIS (Hanya Hijau & Aktif jika Sudah Diprint) */}
+                              <button
+                                type="button"
+                                disabled={!isPrinted}
+                                onClick={() => handleSelesaiTanpaTtd(file.id)}
+                                title={!isPrinted ? "Cetak/Print dokumen fisik terlebih dahulu!" : "Selesaikan dokumen"}
+                                className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-xs whitespace-nowrap flex items-center gap-1 ${
+                                  isPrinted
+                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-md cursor-pointer'
+                                    : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-70 border border-slate-300'
+                                }`}
+                              >
+                                ✅ SELESAI
+                              </button>
 
                             </div>
                           </td>

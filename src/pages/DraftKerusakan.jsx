@@ -20,6 +20,11 @@ function DraftKerusakan() {
   const [loadingFetch, setLoadingFetch] = useState(true);
   const [loadingDraft, setLoadingDraft] = useState(false); 
   const [loadingSelesai, setLoadingSelesai] = useState(false); 
+  
+  // 🌟 WADAH BARU: State khusus penyimpan ID pembuat asli & ID Penanggung
+  const [creatorId, setCreatorId] = useState(null);
+  const [penanggungId, setPenanggungId] = useState(null); 
+  const [currentLoginId, setCurrentLoginId] = useState(null); // 👈 TAMBAHAN BARU
 
   // 🌟 State khusus penampung array file foto & preview
   const [photoFiles, setPhotoFiles] = useState([]);
@@ -61,6 +66,59 @@ function DraftKerusakan() {
     return `${angkaPad}/BTG-${bulanRomawi}/BA/${tahun}`;
   }, []);
 
+  // -------------------------------------------------------------------------
+  // 🌟 MANAJEMEN FOTO DINAMIS (Sinkronisasi foto_X & foto)
+  // -------------------------------------------------------------------------
+  const updatePhotosState = useCallback((updatedList) => {
+    Object.values(filePreviewsRef.current).forEach(url => {
+      if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
+    });
+
+    const newPreviews = {};
+    
+    setFormData(prevForm => {
+      const newFormData = { ...prevForm };
+
+      Object.keys(newFormData).forEach(key => {
+        if (key.startsWith('foto_')) {
+          delete newFormData[key];
+        }
+      });
+
+      const photoListForVariables = [];
+
+      updatedList.forEach((file, index) => {
+        const varName = `foto_${index + 1}`;
+        let previewUrl = '';
+
+        if (file instanceof File) {
+          previewUrl = URL.createObjectURL(file);
+          newFormData[varName] = file;
+        } else {
+          const pathStr = typeof file === 'string' ? file : (file.path || file.url || '');
+          if (pathStr.startsWith('http://') || pathStr.startsWith('https://')) {
+            previewUrl = pathStr;
+          } else {
+            const cleanPath = pathStr.replace(/^\//, '');
+            previewUrl = `http://localhost:8000/${cleanPath}`;
+          }
+          newFormData[varName] = previewUrl;
+          photoListForVariables.push(pathStr);
+        }
+
+        newPreviews[varName] = previewUrl;
+      });
+
+      newFormData['foto'] = photoListForVariables;
+
+      return newFormData;
+    });
+
+    filePreviewsRef.current = newPreviews;
+    setPhotoFiles(updatedList);
+    setFilePreviews(newPreviews);
+  }, []);
+
   const ambilVariabelTemplate = useCallback((idTemplate, dataLama = null) => {
     setLoadingFetch(true);
     const token = localStorage.getItem('token');
@@ -88,6 +146,31 @@ function DraftKerusakan() {
           });
 
           setFormData(cleanedData);
+
+          let existingPhotos = [];
+          if (cleanedData.foto) {
+            if (typeof cleanedData.foto === 'string') {
+              try {
+                existingPhotos = JSON.parse(cleanedData.foto);
+              } catch (e) {
+                existingPhotos = [cleanedData.foto];
+              }
+            } else if (Array.isArray(cleanedData.foto)) {
+              existingPhotos = cleanedData.foto;
+            }
+          }
+
+          if (existingPhotos.length === 0) {
+            Object.keys(cleanedData).forEach(key => {
+              if (key.startsWith('foto_') && cleanedData[key] && typeof cleanedData[key] === 'string') {
+                existingPhotos.push(cleanedData[key]);
+              }
+            });
+          }
+
+          if (existingPhotos.length > 0) {
+            updatePhotosState(existingPhotos);
+          }
           
           const nomorEksis = cleanedData.no || '';
           const matchCounter = nomorEksis.match(/^(\d+)/);
@@ -159,7 +242,7 @@ function DraftKerusakan() {
         console.error("Gagal men-scan template:", err);
         setLoadingFetch(false);
       });
-  }, [buatFormatNomor]);
+  }, [buatFormatNomor, updatePhotosState]);
 
   const ambilDetailDraft = useCallback((draftId) => {
     setLoadingFetch(true);
@@ -175,6 +258,13 @@ function DraftKerusakan() {
         const draftData = res.data.data;
         setNamaDraft(draftData.nama_draft);
         setCurrentTemplateId(draftData.template_id);
+        
+        // 🌟 SIMPAN ID PEMBUAT ASLI DI SINI
+        setCreatorId(draftData.user_id); 
+        // 🌟 TAMBAHAN BARU: Ambil id penanggung dari DB kalau sudah ada
+        setPenanggungId(draftData.assigned_to_id || null);
+        // 🌟 TAMBAHAN BARU: Pastikan Frontend tahu persis siapa yang lagi buka!
+        setCurrentLoginId(res.data.current_user_id);
 
         let dataInputSebelumnya = draftData.data_input;
         if (typeof dataInputSebelumnya === 'string') {
@@ -202,7 +292,7 @@ function DraftKerusakan() {
 
     return () => {
       Object.values(filePreviewsRef.current).forEach(url => {
-        if (url) URL.revokeObjectURL(url);
+        if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
       });
     };
   }, [templateIdParam, draftIdParam, muatDataKaryawan, ambilDetailDraft]);
@@ -269,35 +359,6 @@ function DraftKerusakan() {
     }
   };
 
-  // -------------------------------------------------------------------------
-  // MANAJEMEN FOTO DINAMIS
-  // -------------------------------------------------------------------------
-  const updatePhotosState = (updatedList) => {
-    Object.values(filePreviewsRef.current).forEach(url => {
-      if (url) URL.revokeObjectURL(url);
-    });
-
-    const newPreviews = {};
-    const newFormData = { ...formData };
-
-    Object.keys(newFormData).forEach(key => {
-      if (key.startsWith('foto_')) {
-        delete newFormData[key];
-      }
-    });
-
-    updatedList.forEach((file, index) => {
-      const varName = `foto_${index + 1}`;
-      newFormData[varName] = file;
-      newPreviews[varName] = URL.createObjectURL(file);
-    });
-
-    filePreviewsRef.current = newPreviews;
-    setPhotoFiles(updatedList);
-    setFilePreviews(newPreviews);
-    setFormData(newFormData);
-  };
-
   const handleMultipleFileChange = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
@@ -330,13 +391,17 @@ function DraftKerusakan() {
     });
 
     if (tipeVariable === 'nama_laporan') setShowLaporanDropdown(false);
-    if (tipeVariable === 'nama_penanggung') setShowPenanggungDropdown(false);
+    
+    if (tipeVariable === 'nama_penanggung') {
+      setShowPenanggungDropdown(false);
+      // 🌟 TAMBAHAN BARU: Tangkap ID User si Penanggung (Rahma)
+      // Asumsi table karyawan punya field 'user_id' atau 'id'
+      setPenanggungId(karyawan.user_id || karyawan.id); 
+    }
+
     if (tipeVariable === 'nama_pengetahui') setShowPengetahuiDropdown(false);
   };
 
-  // -------------------------------------------------------------------------
-  // 🌟 GENERATE MULTIPART DATA (PERBAIKAN FOTO FIELD)
-  // -------------------------------------------------------------------------
   const generateMultipartData = (statusDokumen, isCetakLangsung = false) => {
     const data = new FormData();
     data.append('template_id', currentTemplateId);
@@ -351,6 +416,11 @@ function DraftKerusakan() {
     data.append('status', statusDokumen); 
     data.append('status_cetak', 'belum_diprint');
     
+    // 🌟 TAMBAHAN BARU: Kirim ID si Penanggung ke API Backend
+    if (penanggungId) {
+      data.append('assigned_to_id', penanggungId);
+    }
+
     if (calendarDate) {
       data.append('tanggal_dokumen', calendarDate);
     }
@@ -365,20 +435,24 @@ function DraftKerusakan() {
     data.append('jumlah', 1); 
     data.append('keterangan_item', formData['keterangan_kerusakan'] || '');
 
-    // 1. Send all photo files using field name 'foto[]' for Laravel controller
     photoFiles.forEach((file) => {
-      data.append('foto[]', file);
+      if (file instanceof File) {
+        data.append('foto[]', file);
+      } else {
+        const pathVal = typeof file === 'string' ? file : (file.path || file.url || '');
+        data.append('existing_foto[]', typeof file === 'object' ? JSON.stringify(file) : pathVal);
+        data.append('variables[foto][]', pathVal);
+        data.append('isian[foto][]', pathVal);
+      }
     });
 
-    // 2. Send other input values as text variables
     Object.keys(formData).forEach(key => {
       let item = formData[key];
       if (item === null || item === undefined || item === 'null') {
         item = '';
       }
 
-      // Skip File objects from being sent as text strings
-      if (!(item instanceof File)) {
+      if (!(item instanceof File) && key !== 'foto') {
         if (key === 'bulan' && !isCetakLangsung) {
           const romawiMap = {
             'Januari': 'I', 'Februari': 'II', 'Maret': 'III', 'April': 'IV', 'Mei': 'V', 'Juni': 'VI',
@@ -449,13 +523,6 @@ function DraftKerusakan() {
       }
     })
     .then(() => {
-      if (draftIdParam) {
-        return axios.delete(`http://localhost:8000/api/drafts/${draftIdParam}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-      }
-    })
-    .then(() => {
       alert("📥 BA Kerusakan berhasil dikirim ke antrean Siap Cetak!");
       setLoadingSelesai(false);
       navigate('/siap-cetak'); 
@@ -470,6 +537,20 @@ function DraftKerusakan() {
   const formatLabel = (text) => {
     return text.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
+
+  // =========================================================================
+  // 🌟 LOGIKA BARU: PENGECEKAN HAK AKSES BERDASARKAN ID USER (FIXED)
+  // =========================================================================
+
+  // Cek apakah user yang login adalah pembuat asli dokumen ini
+  // Kita cek langsung pakai currentLoginId dari Backend, jadi 100% akurat!
+  const isPembuatDraft = (draftIdParam && creatorId && currentLoginId) 
+    ? String(currentLoginId) === String(creatorId) 
+    : true; // Kalau draft baru, otomatis dia pembuatnya
+
+  // Jika dia BUKAN pembuat draft (contoh: Rahma yang buka draft punya Nadya)
+  // Maka Rahma adalah Penanggung yang dibatasi (cuma bisa update draft, gabisa Selesai)
+  const isRestrictedPenanggung = !isPembuatDraft;
 
   // =========================================================================
   // LIVE PREVIEW
@@ -730,22 +811,36 @@ function DraftKerusakan() {
                   )}
 
                   {/* TOMBOL AKSI */}
-                  <div className="pt-6 border-t border-sky-100 flex flex-wrap justify-end gap-3">
-                    <button 
-                      type="button" 
-                      onClick={handleSaveDraft} 
-                      disabled={loadingDraft || loadingSelesai} 
-                      className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
-                    >
-                      {loadingDraft ? 'Menyimpan...' : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'}
-                    </button>
-                    <button 
-                      type="submit" 
-                      disabled={loadingDraft || loadingSelesai} 
-                      className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
-                    >
-                      {loadingSelesai ? 'Memproses...' : 'Selesai & Kirim Ke Antrean'}
-                    </button>
+                  <div className="pt-6 border-t border-sky-100 flex flex-col items-end gap-3">
+                    
+                    {/* Munculkan peringatan kecil khusus orang lain yang mengisi form */}
+                    {isRestrictedPenanggung && (
+                      <span className="text-[10px] text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-bold shadow-sm">
+                        ⚠️ Akses Terbatas: Anda bukan pembuat asli dokumen ini, Anda hanya diizinkan memperbarui Draft.
+                      </span>
+                    )}
+
+                    <div className="flex flex-wrap justify-end gap-3">
+                      <button 
+                        type="button" 
+                        onClick={handleSaveDraft} 
+                        disabled={loadingDraft || loadingSelesai} 
+                        className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
+                      >
+                        {loadingDraft ? 'Menyimpan...' : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'}
+                      </button>
+                      
+                      {/* Tombol selesai HANYA nampil kalo dia PEMBUAT dokumen */}
+                      {!isRestrictedPenanggung && (
+                        <button 
+                          type="submit" 
+                          disabled={loadingDraft || loadingSelesai} 
+                          className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
+                        >
+                          {loadingSelesai ? 'Memproses...' : 'Selesai & Kirim Ke Antrean'}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                 </form>

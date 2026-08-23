@@ -21,9 +21,10 @@ function DraftPenyerahan() {
   const [loadingDraft, setLoadingDraft] = useState(false); 
   const [loadingSelesai, setLoadingSelesai] = useState(false); 
 
-  // State khusus penampung array file foto & preview
-  const [photoFiles, setPhotoFiles] = useState([]);
-  const [filePreviews, setFilePreviews] = useState({});
+  // 🖼️ STATE FOTO: Dipisah antara foto lama (DB) & foto baru (Upload)
+  const [existingPhotos, setExistingPhotos] = useState([]); // Foto dari DB
+  const [photoFiles, setPhotoFiles] = useState([]);         // File baru dari input
+  const [filePreviews, setFilePreviews] = useState({});     // Penampung preview gabungan
   const filePreviewsRef = useRef({});
 
   // State untuk Tabel Barang / Item Dokumen
@@ -39,9 +40,42 @@ function DraftPenyerahan() {
   const [showPenyerahDropdown, setShowPenyerahDropdown] = useState(false);
   const [showPenerimaDropdown, setShowPenerimaDropdown] = useState(false);
 
+  const BACKEND_URL = 'http://localhost:8000';
+
+  // Helper Sync Previews untuk Live Preview & Form UI
+  const syncPhotoPreviews = (existingList, newFileList) => {
+    Object.values(filePreviewsRef.current).forEach(url => {
+      if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
+    });
+
+    const newPreviews = {};
+
+    // 1. Foto Lama dari DB
+    existingList.forEach((item, index) => {
+      const varName = `foto_${index + 1}`;
+      let src = item.full_url;
+      if (!src && item.path) {
+        const cleanPath = item.path.replace(/\\/g, '/');
+        src = `${BACKEND_URL}/${cleanPath}`;
+      } else if (typeof item === 'string') {
+        src = item.startsWith('http') ? item : `${BACKEND_URL}/${item.replace(/\\/g, '/')}`;
+      }
+      newPreviews[varName] = src;
+    });
+
+    // 2. Foto Baru dari File Input
+    newFileList.forEach((file, index) => {
+      const varName = `foto_${existingList.length + index + 1}`;
+      newPreviews[varName] = URL.createObjectURL(file);
+    });
+
+    filePreviewsRef.current = newPreviews;
+    setFilePreviews(newPreviews);
+  };
+
   const muatDataKaryawan = useCallback(() => {
     const token = localStorage.getItem('token');
-    axios.get('http://localhost:8000/api/karyawan', {
+    axios.get(`${BACKEND_URL}/api/karyawan`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     .then(res => {
@@ -54,7 +88,7 @@ function DraftPenyerahan() {
     setLoadingFetch(true);
     const token = localStorage.getItem('token');
 
-    axios.get(`http://localhost:8000/api/templates/${idTemplate}/variables`, {
+    axios.get(`${BACKEND_URL}/api/templates/${idTemplate}/variables`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/json'
@@ -87,6 +121,18 @@ function DraftPenyerahan() {
           
           setCalendarDate(`${yyyy}-${mm}-${dd}`);
           setFormData(initialFormState);
+
+          // 💡 MUAT FOTO LAMA DARI DATABASE KE STATE PREVIEW
+          let fotoLamaList = [];
+          if (Array.isArray(dataLama.foto)) {
+            fotoLamaList = dataLama.foto;
+          } else if (dataLama.foto) {
+            fotoLamaList = [dataLama.foto];
+          }
+
+          setExistingPhotos(fotoLamaList);
+          syncPhotoPreviews(fotoLamaList, []);
+
           setLoadingFetch(false);
         } else {
           listVariabel.forEach(variable => {
@@ -110,7 +156,7 @@ function DraftPenyerahan() {
           setCalendarDate(tglString);
           setNamaDraft(`${namaTemplate} - ${hariIni.getDate()}/${hariIni.getMonth() + 1}/${yyyy}`);
 
-          axios.get('http://localhost:8000/api/next-counter', {
+          axios.get(`${BACKEND_URL}/api/next-counter`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Accept': 'application/json'
@@ -123,10 +169,8 @@ function DraftPenyerahan() {
             setLoadingFetch(false);
           })
           .catch(err => {
-            console.error("Gagal mengambil counter live, memakai data lokal:", err);
-            if (!initialFormState['no']) {
-              initialFormState['no'] = '001';
-            }
+            console.error("Gagal mengambil counter live:", err);
+            if (!initialFormState['no']) initialFormState['no'] = '001';
             setFormData(initialFormState);
             setLoadingFetch(false);
           });
@@ -142,7 +186,7 @@ function DraftPenyerahan() {
     setLoadingFetch(true);
     const token = localStorage.getItem('token');
 
-    axios.get(`http://localhost:8000/api/drafts/${draftId}`, {
+    axios.get(`${BACKEND_URL}/api/drafts/${draftId}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/json'
@@ -155,7 +199,7 @@ function DraftPenyerahan() {
 
         let dataInputSebelumnya = draftData.data_input;
         if (typeof dataInputSebelumnya === 'string') {
-          dataInputSebelumnya = JSON.parse(dataInputSebelumnya);
+          try { dataInputSebelumnya = JSON.parse(dataInputSebelumnya); } catch (e) { dataInputSebelumnya = {}; }
         }
 
         if (draftData.items) {
@@ -182,7 +226,7 @@ function DraftPenyerahan() {
 
     return () => {
       Object.values(filePreviewsRef.current).forEach(url => {
-        if (url) URL.revokeObjectURL(url);
+        if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
       });
     };
   }, [templateIdParam, draftIdParam, muatDataKaryawan, ambilDetailDraft]);
@@ -244,46 +288,30 @@ function DraftPenyerahan() {
     }
   };
 
-  // MANAJEMEN FOTO DINAMIS
-  const updatePhotosState = (updatedList) => {
-    Object.values(filePreviewsRef.current).forEach(url => {
-      if (url) URL.revokeObjectURL(url);
-    });
-
-    const newPreviews = {};
-    const newFormData = { ...formData };
-
-    Object.keys(newFormData).forEach(key => {
-      if (key.startsWith('foto_')) {
-        delete newFormData[key];
-      }
-    });
-
-    updatedList.forEach((file, index) => {
-      const varName = `foto_${index + 1}`;
-      newFormData[varName] = file;
-      newPreviews[varName] = URL.createObjectURL(file);
-    });
-
-    filePreviewsRef.current = newPreviews;
-    setPhotoFiles(updatedList);
-    setFilePreviews(newPreviews);
-    setFormData(newFormData);
-  };
-
+  // 🖼️ MANAJEMEN FOTO BARU
   const handleMultipleFileChange = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
-    const updatedList = [...photoFiles, ...files];
-    updatePhotosState(updatedList);
+    const updatedFileList = [...photoFiles, ...files];
+    setPhotoFiles(updatedFileList);
+    syncPhotoPreviews(existingPhotos, updatedFileList);
 
     e.target.value = '';
   };
 
-  const handleRemovePhoto = (indexToRemove) => {
-    const updatedList = photoFiles.filter((_, index) => index !== indexToRemove);
-    updatePhotosState(updatedList);
+  // 🗑️ HAPUS FOTO LAMA (DB)
+  const handleRemoveExistingPhoto = (indexToRemove) => {
+    const updatedExisting = existingPhotos.filter((_, idx) => idx !== indexToRemove);
+    setExistingPhotos(updatedExisting);
+    syncPhotoPreviews(updatedExisting, photoFiles);
+  };
+
+  // 🗑️ HAPUS FOTO BARU (UPLOAD)
+  const handleRemoveNewPhoto = (indexToRemove) => {
+    const updatedNew = photoFiles.filter((_, idx) => idx !== indexToRemove);
+    setPhotoFiles(updatedNew);
+    syncPhotoPreviews(existingPhotos, updatedNew);
   };
 
   const pilihKaryawan = (karyawan, tipeVariable) => {
@@ -308,25 +336,26 @@ function DraftPenyerahan() {
     }
   };
 
-  // =========================================================================
-  // 🔥 PERBAIKAN UTAMA DI SINI (PENYEBABB FOTO GAK KEBACA BERHASIL DIPERBAIKI):
-  // =========================================================================
-  const generateMultipartData = (isCetakLangsung = false) => {
+  // 🚀 GENERATE FORM DATA (SUPPORTS EXISTING + NEW PHOTOS)
+  const generateMultipartData = () => {
     const data = new FormData();
     data.append('template_id', currentTemplateId);
     data.append('nama_dokumen', namaDraft);
     data.append('nama_draft', namaDraft);
 
-    // 1. Masukkan semua variabel teks biasa
+    // 1. Variabel biasa
     Object.keys(formData).forEach(key => {
       const item = formData[key];
-      if (!(item instanceof File)) {
-        data.append(`variables[${key}]`, item);
-        data.append(`isian[${key}]`, item); 
+      if (key !== 'foto' && !key.startsWith('foto_') && !(item instanceof File)) {
+        data.append(`variables[${key}]`, item ?? '');
+        data.append(`isian[${key}]`, item ?? ''); 
       }
     });
 
-    // 2. KUNCI UTAMA: Masukkan semua file gambar ke key 'foto[]'
+    // 2. Kirim sisa Foto Lama (JSON)
+    data.append('foto_lama', JSON.stringify(existingPhotos));
+
+    // 3. Kirim File Foto Baru
     if (photoFiles && photoFiles.length > 0) {
       photoFiles.forEach(file => {
         data.append('foto[]', file);
@@ -343,10 +372,10 @@ function DraftPenyerahan() {
     const token = localStorage.getItem('token');
 
     const endpoint = draftIdParam 
-      ? `http://localhost:8000/api/drafts/${draftIdParam}`
-      : 'http://localhost:8000/api/drafts';
+      ? `${BACKEND_URL}/api/drafts/${draftIdParam}`
+      : `${BACKEND_URL}/api/drafts`;
       
-    const payloadMultipart = generateMultipartData(false);
+    const payloadMultipart = generateMultipartData();
 
     if (draftIdParam) {
       payloadMultipart.append('_method', 'PUT');
@@ -378,19 +407,19 @@ function DraftPenyerahan() {
     setLoadingSelesai(true);
     const token = localStorage.getItem('token');
     
-    const payloadMultipart = generateMultipartData(false);
+    const payloadMultipart = generateMultipartData();
     payloadMultipart.append('items', JSON.stringify(dokumen_item));
 
-    axios.post('http://localhost:8000/api/siap-cetak', payloadMultipart, {
+    axios.post(`${BACKEND_URL}/api/siap-cetak`, payloadMultipart, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'multipart/form-data',
         'Accept': 'application/json'
       }
     })
-    .then(res => {
+    .then(() => {
       if (draftIdParam) {
-        return axios.delete(`http://localhost:8000/api/drafts/${draftIdParam}`, {
+        return axios.delete(`${BACKEND_URL}/api/drafts/${draftIdParam}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
       }
@@ -409,7 +438,7 @@ function DraftPenyerahan() {
     return text.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
-  // LIVE PREVIEW DENGAN SKEMA WARNA SKY BLUE
+  // LIVE PREVIEW DENGAN PREVIEW GABUNGAN
   const renderLivePreview = () => {
     if (!textContent) {
       return <p className="text-slate-400 italic text-center py-10">Memuat teks preview...</p>;
@@ -439,41 +468,37 @@ function DraftPenyerahan() {
 
     if (fields.includes('no') || textContent.includes('${no}')) {
       const userValueNo = formData['no'] || "001";
-      const replacementNo = `<span class="text-sky-600 font-bold">${userValueNo}</span>`;
-      processedHTML = processedHTML.replaceAll('${no}', replacementNo);
+      processedHTML = processedHTML.replaceAll('${no}', `<span class="text-sky-600 font-bold">${userValueNo}</span>`);
     }
 
     if (fields.includes('tahun') || textContent.includes('${tahun}')) {
       const userValueTahun = formData['tahun'] || new Date().getFullYear();
-      const replacementTahun = `<span class="text-sky-600 font-bold">${userValueTahun}</span>`;
-      processedHTML = processedHTML.replaceAll('${tahun}', replacementTahun);
+      processedHTML = processedHTML.replaceAll('${tahun}', `<span class="text-sky-600 font-bold">${userValueTahun}</span>`);
     }
 
     if (fields.includes('tanggal') || textContent.includes('${tanggal}')) {
       const userValueTanggal = formData['tanggal'] || new Date().getDate();
-      const replacementTanggal = `<span class="text-sky-600 font-bold">${userValueTanggal}</span>`;
-      processedHTML = processedHTML.replaceAll('${tanggal}', replacementTanggal);
+      processedHTML = processedHTML.replaceAll('${tanggal}', `<span class="text-sky-600 font-bold">${userValueTanggal}</span>`);
     }
 
     if (fields.includes('bulan') || textContent.includes('${bulan}')) {
-      const userValueBulan = formData['bulan'] || 'Juli';
-      
+      const userValueBulan = formData['bulan'] || 'Agustus';
       const romawiMap = {
         'Januari': 'I', 'Februari': 'II', 'Maret': 'III', 'April': 'IV', 'Mei': 'V', 'Juni': 'VI',
         'Juli': 'VII', 'Agustus': 'VIII', 'September': 'IX', 'Oktober': 'X', 'November': 'XI', 'Desember': 'XII'
       };
-      const nilaiRomawi = romawiMap[userValueBulan] || 'VII';
+      const nilaiRomawi = romawiMap[userValueBulan] || 'VIII';
       
       processedHTML = processedHTML.replace(/\/BTG-\s*\${bulan}\s*\//g, `/BTG-<span class="text-sky-600 font-bold">${nilaiRomawi}</span>/`);
-      
-      const replacementAlfabet = `<span class="text-sky-600 font-bold">${userValueBulan}</span>`;
-      processedHTML = processedHTML.replaceAll('${bulan}', replacementAlfabet);
+      processedHTML = processedHTML.replaceAll('${bulan}', `<span class="text-sky-600 font-bold">${userValueBulan}</span>`);
     }
 
     return (
       <div dangerouslySetInnerHTML={{ __html: processedHTML }} className="text-slate-700 leading-relaxed space-y-3 whitespace-pre-line break-words text-xs tracking-normal [&_table]:!w-auto [&_table]:!max-w-full [&_td]:!p-2 [&_table]:border-collapse [&_table]:border [&_table]:border-slate-200 [&_td]:border [&_td]:border-slate-200 [&_th]:border [&_th]:border-slate-200 [&_th]:bg-slate-50" />
     );
   };
+
+  const totalFotoCount = existingPhotos.length + photoFiles.length;
 
   return (
     <div className="bg-[#F4F8FC] text-slate-700 flex h-screen w-full overflow-hidden antialiased selection:bg-sky-200" style={{ fontFamily: "'Poppins', sans-serif" }}>
@@ -595,62 +620,90 @@ function DraftPenyerahan() {
                       })}
                   </div>
 
-                  {/* SECTION UPLOAD FOTO MULTIPLE BISA HAPUS & TAMBAH 1 PER 1 */}
-                  {fields.some(v => v.startsWith('foto_')) && (
-                    <div className="md:col-span-2 flex flex-col gap-1.5 border-t border-sky-100 pt-4">
-                      <div className="flex justify-between items-center">
-                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
-                          Upload Foto Dokumentasi <span className="text-slate-400 font-normal lowercase">(Bisa pilih banyak & nambah 1 per 1)</span>
-                        </label>
-                        <span className="text-xs font-bold text-sky-600">
-                          {photoFiles.length} foto terpilih
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-4 border border-sky-100/80 rounded-2xl p-4 bg-[#F4F8FC]/50 hover:border-sky-300 transition-all">
-                        <input 
-                          type="file" 
-                          accept="image/*"
-                          multiple
-                          onChange={handleMultipleFileChange}
-                          className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer flex-1"
-                        />
-
-                        {/* PREVIEW FOTO + TOMBOL HAPUS (X) */}
-                        {photoFiles.length > 0 && (
-                          <div className="flex flex-wrap gap-3 mt-2">
-                            {photoFiles.map((file, index) => {
-                              const key = `foto_${index + 1}`;
-                              const previewUrl = filePreviews[key];
-
-                              return (
-                                <div key={index} className="relative group w-20 h-20">
-                                  <img 
-                                    src={previewUrl} 
-                                    alt={`Preview ${key}`} 
-                                    className="w-full h-full object-cover rounded-xl border border-sky-200 shadow-xs"
-                                  />
-
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemovePhoto(index)}
-                                    title="Hapus foto ini"
-                                    className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md transition-all cursor-pointer transform hover:scale-110"
-                                  >
-                                    ✕
-                                  </button>
-
-                                  <span className="absolute bottom-1 right-1 bg-sky-500/90 backdrop-blur-xs text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold">
-                                    F{index + 1}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
+                  {/* 🖼️ SECTION UPLOAD & PREVIEW FOTO (GABUNGAN FOTO LAMA + BARU) */}
+                  <div className="md:col-span-2 flex flex-col gap-1.5 border-t border-sky-100 pt-4">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
+                        Upload Foto Dokumentasi <span className="text-slate-400 font-normal lowercase">(Dapat menambah/menghapus per foto)</span>
+                      </label>
+                      <span className="text-xs font-bold text-sky-600">
+                        {totalFotoCount} foto terdaftar
+                      </span>
                     </div>
-                  )}
+
+                    <div className="flex flex-col gap-4 border border-sky-100/80 rounded-2xl p-4 bg-[#F4F8FC]/50 hover:border-sky-300 transition-all">
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        multiple
+                        onChange={handleMultipleFileChange}
+                        className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer flex-1"
+                      />
+
+                      {/* AREA PREVIEW GABUNGAN (FOTO LAMA DB + FOTO BARU UPLOAD) */}
+                      {totalFotoCount > 0 && (
+                        <div className="flex flex-wrap gap-3 mt-2">
+                          {/* 1. Foto Lama dari Database */}
+                          {existingPhotos.map((item, index) => {
+                            const key = `foto_${index + 1}`;
+                            const previewUrl = filePreviews[key];
+
+                            return (
+                              <div key={`existing-${index}`} className="relative group w-20 h-20">
+                                <img 
+                                  src={previewUrl} 
+                                  alt={`Foto Lama ${index + 1}`} 
+                                  className="w-full h-full object-cover rounded-xl border border-sky-200 shadow-xs"
+                                  onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = 'https://via.placeholder.com/150?text=Error';
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveExistingPhoto(index)}
+                                  title="Hapus foto ini"
+                                  className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md transition-all cursor-pointer transform hover:scale-110"
+                                >
+                                  ✕
+                                </button>
+                                <span className="absolute bottom-1 right-1 bg-blue-600/90 backdrop-blur-xs text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold">
+                                  DB F{index + 1}
+                                </span>
+                              </div>
+                            );
+                          })}
+
+                          {/* 2. Foto Baru dari File Input */}
+                          {photoFiles.map((file, index) => {
+                            const key = `foto_${existingPhotos.length + index + 1}`;
+                            const previewUrl = filePreviews[key];
+
+                            return (
+                              <div key={`new-${index}`} className="relative group w-20 h-20">
+                                <img 
+                                  src={previewUrl} 
+                                  alt={`Foto Baru ${index + 1}`} 
+                                  className="w-full h-full object-cover rounded-xl border border-emerald-300 shadow-xs"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveNewPhoto(index)}
+                                  title="Hapus foto baru ini"
+                                  className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md transition-all cursor-pointer transform hover:scale-110"
+                                >
+                                  ✕
+                                </button>
+                                <span className="absolute bottom-1 right-1 bg-emerald-600/90 backdrop-blur-xs text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold">
+                                  Baru
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
                   <div className="pt-6 border-t border-sky-100 flex flex-wrap justify-end gap-3">
                     <button 
@@ -687,7 +740,7 @@ function DraftPenyerahan() {
                 <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-3.5 mb-3 flex items-start gap-2.5 text-[11px] leading-relaxed text-sky-950 font-medium">
                   <span className="text-sm mt-0.5">💡</span>
                   <div>
-                    <strong className="text-sky-900">Sistem Nomor Dokumen:</strong> Nomor surat yang tertera di live preview saat ini hanyalah <strong>contoh/estimasi sementara</strong>. Nomor resmi yang asli akan otomatis disesuaikan secara akurat berdasarkan urutan terakhir di database saat dokumen dicetak.
+                    <strong className="text-sky-900">Sistem Nomor Dokumen:</strong> Nomor surat yang tertera di live preview saat ini hanyalah <strong>contoh/estimasi sementara</strong>. Nomor resmi yang asli akan otomatis disesuaikan saat dicetak.
                   </div>
                 </div>
 

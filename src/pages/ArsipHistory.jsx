@@ -34,8 +34,20 @@ const dapatkanValueSakti = (inputObj, targetKey) => {
   return null;
 };
 
+// HELPER FORMAT TANGGAL: Mengubah "2026-08-19 23:54:09" jadi "19 Agustus 2026"
+const formatTanggalIndo = (dateString) => {
+  if (!dateString) return null;
+  // Replace spasi ke T biar aman parsing di semua jenis browser
+  const safeDateString = dateString.replace(' ', 'T'); 
+  const date = new Date(safeDateString);
+  const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  
+  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+};
+
 // ================= SUB-KOMPONEN BARIS DOKUMEN (GRID ROW) =================
-function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, onBukaModal, activeTab, isHighlighted, highlightedRef }) {
+// 🟢 PERBAIKAN: Menambahkan props userRole
+function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, onBukaModal, activeTab, isHighlighted, highlightedRef, userRole }) {
   // Pengecekan status apakah sedang di tab/halaman Aktif
   const isAktif = statusFilter === '1';
 
@@ -59,8 +71,8 @@ function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, 
           : 'bg-white hover:bg-sky-50/30 border border-sky-100/80 hover:border-sky-300 shadow-xs hover:shadow-lg hover:shadow-sky-100/80 hover:scale-[1.01] hover:-translate-y-0.5'
       }`}
     >
-      {/* 1. INFORMASI BERKAS (COL SPAN 5) */}
-      <div className="col-span-5 flex items-center gap-3.5">
+      {/* 1. INFORMASI BERKAS (Dinasehatin Lebar Kolomnya Berdasarkan Role) */}
+      <div className={`${(userRole === 'admin' || userRole === 'master_admin') ? 'col-span-5' : 'col-span-7'} flex items-center gap-3.5`}>
         <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 border transition-colors ${
           isHighlighted ? 'bg-emerald-100 text-emerald-600 border-emerald-300' : 'bg-gradient-to-br from-sky-100/80 to-blue-50 text-sky-600 border-sky-100 group-hover:scale-110'
         }`}>
@@ -118,6 +130,11 @@ function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, 
               <span>🛠️ Pekerjaan: {pekerjaanJasa || <span className="italic text-slate-400">[Tidak ada detail pekerjaan]</span>}</span>
             </p>
           )}
+
+          {/* MENAMPILKAN TANGGAL CETAK TERAKHIR */}
+          <p className="text-[10px] text-emerald-600 font-bold mt-1 flex items-center gap-1 truncate max-w-[320px]">
+            <span>🖨️ Tanggal Cetak Terakhir: {file.tanggal_cetak ? formatTanggalIndo(file.tanggal_cetak) : <span className="italic text-slate-400 font-normal">Belum pernah dicetak</span>}</span>
+          </p>
         </div>
       </div>
 
@@ -139,21 +156,23 @@ function ArsipRow({ file, statusFilter, printingId, onCetakLagi, onToggleAktif, 
         )}
       </div>
 
-      {/* 3. TOMBOL AKSI (COL SPAN 2) */}
-      <div className="col-span-2 flex items-center justify-center">
-        <button
-          type="button"
-          onClick={() => onToggleAktif(file.id)}
-          title={isAktif ? 'Nonaktifkan Dokumen' : 'Aktifkan Kembali Dokumen'}
-          className={`px-3 py-1.5 rounded-xl border transition-all duration-300 cursor-pointer font-bold text-[11px] flex items-center gap-1 active:scale-95 shadow-2xs hover:shadow-md transform hover:-translate-y-0.5 select-none ${
-            isAktif
-              ? 'bg-rose-50/80 border-rose-100 text-rose-500 hover:bg-rose-500 hover:text-white hover:border-transparent'
-              : 'bg-emerald-50/80 border-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white hover:border-transparent'
-          }`}
-        >
-          {isAktif ? '🚫 Nonaktifkan' : '✓ Aktifkan'}
-        </button>
-      </div>
+      {/* 3. TOMBOL AKSI (Hanya tampil jika userRole admin atau masteradmin) */}
+      {(userRole === 'admin' || userRole === 'master_admin') && (
+        <div className="col-span-2 flex items-center justify-center">
+          <button
+            type="button"
+            onClick={() => onToggleAktif(file.id)}
+            title={isAktif ? 'Nonaktifkan Dokumen' : 'Aktifkan Kembali Dokumen'}
+            className={`px-3 py-1.5 rounded-xl border transition-all duration-300 cursor-pointer font-bold text-[11px] flex items-center gap-1 active:scale-95 shadow-2xs hover:shadow-md transform hover:-translate-y-0.5 select-none ${
+              isAktif
+                ? 'bg-rose-50/80 border-rose-100 text-rose-500 hover:bg-rose-500 hover:text-white hover:border-transparent'
+                : 'bg-emerald-50/80 border-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white hover:border-transparent'
+            }`}
+          >
+            {isAktif ? '🚫 Nonaktifkan' : '✓ Aktifkan'}
+          </button>
+        </div>
+      )}
 
     </div>
   );
@@ -351,6 +370,8 @@ function ArsipHistory() {
     .then(res => {
       if (res.data && res.data.pdf_url) {
         window.open(res.data.pdf_url, '_blank');
+        // REFRESH DATA OTOMATIS BIAR TANGGAL CETAK LANGSUNG MUNCUL
+        ambilDataHistory(statusFilter); 
       } else {
         alert("🎉 Dokumen berhasil dikonversi, namun URL PDF tidak ditemukan.");
       }
@@ -443,17 +464,20 @@ function ArsipHistory() {
 
             {/* KONTROL KANAN (Toggle Aktif + Search Bar Pindah ke Atas) */}
             <div className="flex items-center gap-3">
-              <button 
-                type="button"
-                onClick={() => setStatusFilter(statusFilter === '1' ? '0' : '1')}
-                className={`flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-extrabold rounded-2xl border transition-all duration-300 shadow-2xs hover:shadow-md cursor-pointer whitespace-nowrap active:scale-95 ${
-                  statusFilter === '1' 
-                    ? 'bg-rose-50/80 border-rose-100 text-rose-500 hover:bg-rose-500 hover:text-white hover:border-transparent' 
-                    : 'bg-emerald-50/80 border-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white hover:border-transparent'
-                }`}
-              >
-                {statusFilter === '1' ? '🚫 Lihat Arsip Nonaktif' : '👥 Lihat Arsip Aktif'}
-              </button>
+              {/* TOMBOL LIHAT NONAKTIF (Hanya untuk Admin / Masteradmin) */}
+              {(userRole === 'admin' || userRole === 'master_admin') && (
+                <button 
+                  type="button"
+                  onClick={() => setStatusFilter(statusFilter === '1' ? '0' : '1')}
+                  className={`flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-extrabold rounded-2xl border transition-all duration-300 shadow-2xs hover:shadow-md cursor-pointer whitespace-nowrap active:scale-95 ${
+                    statusFilter === '1' 
+                      ? 'bg-rose-50/80 border-rose-100 text-rose-500 hover:bg-rose-500 hover:text-white hover:border-transparent' 
+                      : 'bg-emerald-50/80 border-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white hover:border-transparent'
+                  }`}
+                >
+                  {statusFilter === '1' ? '🚫 Lihat Arsip Nonaktif' : '👥 Lihat Arsip Aktif'}
+                </button>
+              )}
 
               <div className="relative w-64">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-sky-400 text-xs">🔍</span>
@@ -509,11 +533,15 @@ function ArsipHistory() {
           ) : (
             <div className="bg-white rounded-3xl border border-sky-200/80 shadow-md shadow-sky-100/60 p-3 space-y-2">
               
-              {/* HEADER TABEL */}
+              {/* 🟢 PERBAIKAN HEADER TABEL: Dinamis menyesuaikan role user */}
               <div className="grid grid-cols-12 px-6 py-3 bg-[#F4F8FC] rounded-2xl text-[10px] font-extrabold text-sky-600 uppercase tracking-wider">
-                <div className="col-span-5">Detail Nama Berkas</div>
+                <div className={(userRole === 'admin' || userRole === 'master_admin') ? "col-span-5" : "col-span-7"}>Detail Nama Berkas</div>
                 <div className="col-span-5 text-center">Konfigurasi & Cetak Fisik</div>
-                <div className="col-span-2 text-center">Aksi</div>
+                
+                {/* Kolom Aksi Hanya Muncul Untuk Admin / Masteradmin */}
+                {(userRole === 'admin' || userRole === 'master_admin') && (
+                  <div className="col-span-2 text-center">Aksi</div>
+                )}
               </div>
 
               {/* LIST FRAME ARSIP */}
@@ -533,6 +561,7 @@ function ArsipHistory() {
                       activeTab={activeTab}
                       isHighlighted={isHighlighted}
                       highlightedRef={isHighlighted ? highlightedRef : null}
+                      userRole={userRole} // 🟢 Mengirim prop userRole ke komponen ArsipRow
                     />
                   );
                 })}
