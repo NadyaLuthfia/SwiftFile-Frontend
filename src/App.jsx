@@ -59,6 +59,7 @@ function App() {
                 <Route path="/draft-tor-jasa" element={<DraftTorJasa />} />
                 <Route path="/siap-cetak" element={<SiapCetak />} />
                 <Route path="/arsip-history" element={<ArsipHistory />} />
+                <Route path="/arsip" element={<ArsipHistory />} /> {/* 🚀 Tambahan Route Alias */}
                 <Route path="/management-data" element={<ManagementData />} />
                 <Route path="/monitoring-data" element={<MonitoringData />} />
                 <Route path="*" element={<Navigate to="/master-dashboard" replace />} />
@@ -79,6 +80,7 @@ function App() {
                 <Route path="/draft-tor-jasa" element={<DraftTorJasa />} />
                 <Route path="/siap-cetak" element={<SiapCetak />} />
                 <Route path="/arsip-history" element={<ArsipHistory />} />
+                <Route path="/arsip" element={<ArsipHistory />} /> {/* 🚀 Tambahan Route Alias */}
                 <Route path="/management-data" element={<ManagementData />} />
                 <Route path="/monitoring-data" element={<MonitoringData />} />
                 <Route path="*" element={<Navigate to="/admin-dashboard" replace />} />
@@ -99,6 +101,7 @@ function App() {
                 <Route path="/draft-tor-jasa" element={<DraftTorJasa />} />
                 <Route path="/siap-cetak" element={<SiapCetak />} />
                 <Route path="/arsip-history" element={<ArsipHistory />} />
+                <Route path="/arsip" element={<ArsipHistory />} /> {/* 🚀 Tambahan Route Alias */}
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </>
             )}

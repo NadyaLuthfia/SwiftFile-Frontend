@@ -21,12 +21,12 @@ function DraftKerusakan() {
   const [loadingDraft, setLoadingDraft] = useState(false); 
   const [loadingSelesai, setLoadingSelesai] = useState(false); 
   
-  // 🌟 WADAH BARU: State khusus penyimpan ID pembuat asli & ID Penanggung
+  // State penyimpan ID pembuat asli, ID Penanggung, dan ID User Login
   const [creatorId, setCreatorId] = useState(null);
   const [penanggungId, setPenanggungId] = useState(null); 
-  const [currentLoginId, setCurrentLoginId] = useState(null); // 👈 TAMBAHAN BARU
+  const [currentLoginId, setCurrentLoginId] = useState(null);
 
-  // 🌟 State khusus penampung array file foto & preview
+  // State khusus penampung array file foto & preview
   const [photoFiles, setPhotoFiles] = useState([]);
   const [filePreviews, setFilePreviews] = useState({});
   const filePreviewsRef = useRef({});
@@ -66,9 +66,7 @@ function DraftKerusakan() {
     return `${angkaPad}/BTG-${bulanRomawi}/BA/${tahun}`;
   }, []);
 
-  // -------------------------------------------------------------------------
-  // 🌟 MANAJEMEN FOTO DINAMIS (Sinkronisasi foto_X & foto)
-  // -------------------------------------------------------------------------
+  // MANAJEMEN FOTO DINAMIS
   const updatePhotosState = useCallback((updatedList) => {
     Object.values(filePreviewsRef.current).forEach(url => {
       if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
@@ -248,6 +246,14 @@ function DraftKerusakan() {
     setLoadingFetch(true);
     const token = localStorage.getItem('token');
 
+    let loggedInUserId = null;
+    try {
+      const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      loggedInUserId = savedUser.id || savedUser.user_id || savedUser.id_user || localStorage.getItem('user_id');
+    } catch (e) {
+      loggedInUserId = localStorage.getItem('user_id');
+    }
+
     axios.get(`http://localhost:8000/api/drafts/${draftId}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -259,12 +265,11 @@ function DraftKerusakan() {
         setNamaDraft(draftData.nama_draft);
         setCurrentTemplateId(draftData.template_id);
         
-        // 🌟 SIMPAN ID PEMBUAT ASLI DI SINI
         setCreatorId(draftData.user_id); 
-        // 🌟 TAMBAHAN BARU: Ambil id penanggung dari DB kalau sudah ada
         setPenanggungId(draftData.assigned_to_id || null);
-        // 🌟 TAMBAHAN BARU: Pastikan Frontend tahu persis siapa yang lagi buka!
-        setCurrentLoginId(res.data.current_user_id);
+        
+        const userIdAktif = res.data.current_user_id || draftData.current_user_id || loggedInUserId;
+        setCurrentLoginId(userIdAktif);
 
         let dataInputSebelumnya = draftData.data_input;
         if (typeof dataInputSebelumnya === 'string') {
@@ -275,7 +280,6 @@ function DraftKerusakan() {
       })
       .catch(err => {
         console.error("Gagal memuat detail draft:", err);
-        alert("Draft tidak ditemukan atau telah dihapus.");
         setLoadingFetch(false);
       });
   }, [ambilVariabelTemplate]);
@@ -394,8 +398,6 @@ function DraftKerusakan() {
     
     if (tipeVariable === 'nama_penanggung') {
       setShowPenanggungDropdown(false);
-      // 🌟 TAMBAHAN BARU: Tangkap ID User si Penanggung (Rahma)
-      // Asumsi table karyawan punya field 'user_id' atau 'id'
       setPenanggungId(karyawan.user_id || karyawan.id); 
     }
 
@@ -416,7 +418,6 @@ function DraftKerusakan() {
     data.append('status', statusDokumen); 
     data.append('status_cetak', 'belum_diprint');
     
-    // 🌟 TAMBAHAN BARU: Kirim ID si Penanggung ke API Backend
     if (penanggungId) {
       data.append('assigned_to_id', penanggungId);
     }
@@ -425,13 +426,20 @@ function DraftKerusakan() {
       data.append('tanggal_dokumen', calendarDate);
     }
 
-    const merk = formData['merk'] || '-';
-    const model = formData['model'] || '-';
-    const noSeri = formData['no_seri'] || '-';
-    const spesifikasiGabungan = `Merk: ${merk}, Model: ${model}, No Seri: ${noSeri}`;
+    const namaAlat = formData['nama_alat'] || formData['nama_item'] || '';
+    const noInv = formData['no_inventaris'] || '';
+    const merk = formData['merk'] || '';
+    const model = formData['model'] || '';
+    const noSeri = formData['no_seri'] || '';
 
-    data.append('nama_item', formData['nama_alat'] || '');
-    data.append('spesifikasi', spesifikasiGabungan);
+    const spesifikasiArr = [];
+    if (noInv) spesifikasiArr.push(`No Inv: ${noInv}`);
+    if (merk) spesifikasiArr.push(`Merk: ${merk}`);
+    if (model) spesifikasiArr.push(`Model: ${model}`);
+    if (noSeri) spesifikasiArr.push(`No Seri: ${noSeri}`);
+
+    data.append('nama_item', namaAlat);
+    data.append('spesifikasi', spesifikasiArr.join(', ') || '-');
     data.append('jumlah', 1); 
     data.append('keterangan_item', formData['keterangan_kerusakan'] || '');
 
@@ -496,65 +504,86 @@ function DraftKerusakan() {
         'Accept': 'application/json'
       }
     })
-    .then(() => {
-      alert("📁 Draft BA Kerusakan berhasil diamankan!");
+    .then((res) => {
       setLoadingDraft(false);
-      navigate('/draft-dokumen'); 
+      const savedId = res.data?.data?.id || res.data?.id || draftIdParam;
+
+      if (savedId) {
+        navigate(`/draft-dokumen?highlight_id=${savedId}`);
+      } else {
+        navigate('/draft-dokumen');
+      }
     })
     .catch(err => {
-      console.error(err);
-      alert("❌ Gagal memproses simpan draf.");
+      console.error("Gagal memproses simpan draf:", err);
       setLoadingDraft(false);
     });
   };
 
-  const handleSelesai = (e) => {
+  const handleSelesai = async (e) => {
     e.preventDefault();
     setLoadingSelesai(true);
     const token = localStorage.getItem('token');
-    
-    const payloadMultipart = generateMultipartData('belum_dicetak', true);
 
-    axios.post('http://localhost:8000/api/siap-cetak', payloadMultipart, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data',
-        'Accept': 'application/json'
+    try {
+      const payloadMultipart = generateMultipartData('belum_dicetak', true);
+      const resCetak = await axios.post('http://localhost:8000/api/siap-cetak', payloadMultipart, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+          'Accept': 'application/json'
+        }
+      });
+
+      const newCreatedId = resCetak.data?.data?.id || resCetak.data?.id;
+
+      if (draftIdParam) {
+        await axios.delete(`http://localhost:8000/api/drafts/${draftIdParam}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          }
+        });
       }
-    })
-    .then(() => {
-      alert("📥 BA Kerusakan berhasil dikirim ke antrean Siap Cetak!");
+
       setLoadingSelesai(false);
-      navigate('/siap-cetak'); 
-    })
-    .catch(err => {
-      console.error(err);
-      alert("❌ Gagal memproses data ke antrean siap cetak.");
+
+      navigate('/siap-cetak', {
+        state: {
+          targetTab: 'ba_kerusakan', 
+          highlightId: newCreatedId
+        }
+      });
+    } catch (err) {
+      console.error("Gagal memproses data ke antrean siap cetak:", err);
       setLoadingSelesai(false);
-    });
+    }
   };
 
   const formatLabel = (text) => {
     return text.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
-  // =========================================================================
-  // 🌟 LOGIKA BARU: PENGECEKAN HAK AKSES BERDASARKAN ID USER (FIXED)
-  // =========================================================================
+  const getActiveUserId = () => {
+    try {
+      const userStorage = JSON.parse(localStorage.getItem('user') || '{}');
+      const id = userStorage.id || userStorage.user_id || userStorage.id_user;
+      if (id) return String(id);
+    } catch (e) {}
+    if (currentLoginId) return String(currentLoginId);
+    if (localStorage.getItem('user_id')) return String(localStorage.getItem('user_id'));
+    return null;
+  };
 
-  // Cek apakah user yang login adalah pembuat asli dokumen ini
-  // Kita cek langsung pakai currentLoginId dari Backend, jadi 100% akurat!
-  const isPembuatDraft = (draftIdParam && creatorId && currentLoginId) 
-    ? String(currentLoginId) === String(creatorId) 
-    : true; // Kalau draft baru, otomatis dia pembuatnya
+  const activeUserId = getActiveUserId();
 
-  // Jika dia BUKAN pembuat draft (contoh: Rahma yang buka draft punya Nadya)
-  // Maka Rahma adalah Penanggung yang dibatasi (cuma bisa update draft, gabisa Selesai)
-  const isRestrictedPenanggung = !isPembuatDraft;
+  const isRestrictedPenanggung = Boolean(
+    draftIdParam && (
+      (penanggungId && activeUserId && String(activeUserId) === String(penanggungId)) ||
+      (creatorId && activeUserId && String(activeUserId) !== String(creatorId))
+    )
+  );
 
-  // =========================================================================
-  // LIVE PREVIEW
-  // =========================================================================
   const renderLivePreview = () => {
     if (!textContent) {
       return <p className="text-slate-400 italic text-center py-10">Memuat teks preview...</p>;
@@ -666,34 +695,66 @@ function DraftKerusakan() {
                         type="date"
                         value={calendarDate}
                         onChange={handleCalendarChange}
-                        className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all"
-                        required
+                        disabled={isRestrictedPenanggung}
+                        className={`border rounded-xl px-3.5 py-2.5 text-xs font-semibold outline-none transition-all ${
+                          isRestrictedPenanggung 
+                            ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed select-none' 
+                            : 'bg-[#F4F8FC]/50 text-slate-800 border-sky-100 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100'
+                        }`}
+                        required={!isRestrictedPenanggung}
                       />
                     </div>
                   </div>
 
-                  {/* VARIABEL DINAMIS LAINNYA */}
+                  {/* VARIABEL DINAMIS TANPA MENGUBAH URUTAN BAWAAN BACKEND */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {fields
-                      .filter(v => v !== 'no' && v !== 'bulan' && v !== 'tahun' && v !== 'tanggal' && v !== 'hari' && !v.startsWith('foto_'))
-                      .map((variableName) => {
+                    {(() => {
+                      // Filter variabel bawaan
+                      const rawFields = fields.filter(
+                        v => v !== 'no' && v !== 'bulan' && v !== 'tahun' && v !== 'tanggal' && v !== 'hari' && !v.startsWith('foto_')
+                      );
+
+                      // Pertahankan urutan asli backend, HANYA memindahkan 'catatan' ke posisi setelah 'bidang_laporan'
+                      let orderedFields = [...rawFields];
+                      if (orderedFields.includes('catatan')) {
+                        orderedFields = orderedFields.filter(f => f !== 'catatan');
+                        const idxBidang = orderedFields.indexOf('bidang_laporan');
+                        if (idxBidang !== -1) {
+                          orderedFields.splice(idxBidang + 1, 0, 'catatan');
+                        } else {
+                          orderedFields.push('catatan');
+                        }
+                      }
+
+                      return orderedFields.map((variableName) => {
                         const isLaporan = variableName === 'nama_laporan';
                         const isPenanggung = variableName === 'nama_penanggung';
                         const isPengetahui = variableName === 'nama_pengetahui';
                         
+                        const isCatatan = variableName.toLowerCase() === 'catatan';
+                        const isFieldDisabled = isRestrictedPenanggung && !isCatatan;
+
                         return (
-                          <div key={variableName} className={`flex flex-col gap-1.5 ${isLaporan || isPenanggung || isPengetahui ? 'relative' : ''}`}>
+                          <div 
+                            key={variableName} 
+                            className={`flex flex-col gap-1.5 ${isCatatan ? 'md:col-span-2' : ''} ${isLaporan || isPenanggung || isPengetahui ? 'relative' : ''}`}
+                          >
                             <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
                               {formatLabel(variableName)} <span className="text-slate-400 font-mono text-[10px] font-normal">({variableName})</span>
                             </label>
                             
-                            {variableName === 'kronologis' || variableName === 'fungsi_alat' ? (
+                            {variableName === 'kronologis' || variableName === 'fungsi_alat' || isCatatan ? (
                               <textarea
                                 name={variableName}
                                 value={formData[variableName] || ''}
                                 onChange={handleChange}
-                                className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all h-20 resize-none"
-                                required
+                                disabled={isFieldDisabled}
+                                className={`border rounded-xl px-3.5 py-2.5 text-xs font-medium outline-none transition-all h-20 resize-none ${
+                                  isFieldDisabled 
+                                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed select-none' 
+                                    : 'bg-[#F4F8FC]/50 text-slate-800 border-sky-100 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100'
+                                }`}
+                                required={!isCatatan && !isFieldDisabled}
                               />
                             ) : (
                               <input 
@@ -701,10 +762,13 @@ function DraftKerusakan() {
                                 name={variableName} 
                                 value={formData[variableName] || ''} 
                                 onChange={handleChange}
+                                disabled={isFieldDisabled}
                                 onFocus={() => {
-                                  if (isLaporan && formData.nama_laporan) setShowLaporanDropdown(true);
-                                  if (isPenanggung && formData.nama_penanggung) setShowPenanggungDropdown(true);
-                                  if (isPengetahui && formData.nama_pengetahui) setShowPengetahuiDropdown(true);
+                                  if (!isFieldDisabled) {
+                                    if (isLaporan && formData.nama_laporan) setShowLaporanDropdown(true);
+                                    if (isPenanggung && formData.nama_penanggung) setShowPenanggungDropdown(true);
+                                    if (isPengetahui && formData.nama_pengetahui) setShowPengetahuiDropdown(true);
+                                  }
                                 }}
                                 onBlur={() => {
                                   setTimeout(() => {
@@ -713,13 +777,17 @@ function DraftKerusakan() {
                                     if (isPengetahui) setShowPengetahuiDropdown(false);
                                   }, 200);
                                 }}
-                                className="border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium bg-[#F4F8FC]/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all"
-                                required 
+                                className={`border rounded-xl px-3.5 py-2.5 text-xs font-medium outline-none transition-all ${
+                                  isFieldDisabled 
+                                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed select-none' 
+                                    : 'bg-[#F4F8FC]/50 text-slate-800 border-sky-100 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100'
+                                }`}
+                                required={!isFieldDisabled} 
                               />
                             )}
 
                             {/* DROPDOWN AUTOCOMPLETE */}
-                            {isLaporan && showLaporanDropdown && filteredLaporan.length > 0 && (
+                            {!isFieldDisabled && isLaporan && showLaporanDropdown && filteredLaporan.length > 0 && (
                               <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
                                 {filteredLaporan.map(k => (
                                   <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_laporan')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
@@ -729,7 +797,7 @@ function DraftKerusakan() {
                               </div>
                             )}
 
-                            {isPenanggung && showPenanggungDropdown && filteredPenanggung.length > 0 && (
+                            {!isFieldDisabled && isPenanggung && showPenanggungDropdown && filteredPenanggung.length > 0 && (
                               <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
                                 {filteredPenanggung.map(k => (
                                   <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_penanggung')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
@@ -739,7 +807,7 @@ function DraftKerusakan() {
                               </div>
                             )}
 
-                            {isPengetahui && showPengetahuiDropdown && filteredPengetahui.length > 0 && (
+                            {!isFieldDisabled && isPengetahui && showPengetahuiDropdown && filteredPengetahui.length > 0 && (
                               <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
                                 {filteredPengetahui.map(k => (
                                   <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_pengetahui')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
@@ -750,7 +818,8 @@ function DraftKerusakan() {
                             )}
                           </div>
                         );
-                      })}
+                      });
+                    })()}
                   </div>
 
                   {/* SECTION UPLOAD FOTO MULTIPLE */}
@@ -770,8 +839,13 @@ function DraftKerusakan() {
                           type="file" 
                           accept="image/*"
                           multiple
+                          disabled={isRestrictedPenanggung}
                           onChange={handleMultipleFileChange}
-                          className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer flex-1"
+                          className={`text-xs flex-1 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold ${
+                            isRestrictedPenanggung 
+                              ? 'text-slate-400 opacity-50 cursor-not-allowed file:bg-slate-200 file:text-slate-400' 
+                              : 'text-slate-500 file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer'
+                          }`}
                         />
 
                         {/* PREVIEW FOTO */}
@@ -789,14 +863,16 @@ function DraftKerusakan() {
                                     className="w-full h-full object-cover rounded-xl border border-sky-200 shadow-xs"
                                   />
 
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemovePhoto(index)}
-                                    title="Hapus foto ini"
-                                    className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md transition-all cursor-pointer transform hover:scale-110"
-                                  >
-                                    ✕
-                                  </button>
+                                  {!isRestrictedPenanggung && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemovePhoto(index)}
+                                      title="Hapus foto ini"
+                                      className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md transition-all cursor-pointer transform hover:scale-110"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
 
                                   <span className="absolute bottom-1 right-1 bg-sky-500/90 backdrop-blur-xs text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold">
                                     F{index + 1}
@@ -810,13 +886,12 @@ function DraftKerusakan() {
                     </div>
                   )}
 
-                  {/* TOMBOL AKSI */}
+                  {/* TOMBOL AKSI BERDASARKAN HAK AKSES */}
                   <div className="pt-6 border-t border-sky-100 flex flex-col items-end gap-3">
                     
-                    {/* Munculkan peringatan kecil khusus orang lain yang mengisi form */}
                     {isRestrictedPenanggung && (
                       <span className="text-[10px] text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-bold shadow-sm">
-                        ⚠️ Akses Terbatas: Anda bukan pembuat asli dokumen ini, Anda hanya diizinkan memperbarui Draft.
+                        ⚠️ Akses Penanggung Jawab: Anda hanya memiliki hak untuk mengisi & menyimpan Catatan.
                       </span>
                     )}
 
@@ -825,12 +900,20 @@ function DraftKerusakan() {
                         type="button" 
                         onClick={handleSaveDraft} 
                         disabled={loadingDraft || loadingSelesai} 
-                        className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
+                        className={
+                          isRestrictedPenanggung
+                            ? "bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                            : "bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
+                        }
                       >
-                        {loadingDraft ? 'Menyimpan...' : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'}
+                        {loadingDraft 
+                          ? 'Menyimpan...' 
+                          : isRestrictedPenanggung 
+                            ? '💾 Simpan Catatan' 
+                            : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'
+                        }
                       </button>
                       
-                      {/* Tombol selesai HANYA nampil kalo dia PEMBUAT dokumen */}
                       {!isRestrictedPenanggung && (
                         <button 
                           type="submit" 

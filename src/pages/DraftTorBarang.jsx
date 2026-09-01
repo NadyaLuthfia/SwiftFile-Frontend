@@ -9,7 +9,7 @@ function DraftTorBarang() {
   const templateId = searchParams.get('template_id');
   const draftId = searchParams.get('draft_id') || searchParams.get('id'); // ID untuk mode edit
 
-  // 👇 1. State baru untuk simpan templateId yang ditarik dari backend 👇
+  // 1. State simpan templateId dari backend
   const [savedTemplateId, setSavedTemplateId] = useState(templateId || '');
 
   const [loading, setLoading] = useState(false);
@@ -37,12 +37,23 @@ function DraftTorBarang() {
     jumlah_harga: ''
   });
 
-  // State Tabel Rincian Barang & Foto (Ditambahkan foto_path untuk simpanan JSON)
+  // State Tabel Rincian Barang & Foto
   const [itemsRincian, setItemsRincian] = useState([
     { barang: '', foto_file: null, foto_preview: null, foto_path: '', qty: '1', satuan: 'Pcs', harga_satuan: '', total: '' }
   ]);
 
-  // 1. Fetch Data Karyawan / Pegawai
+  // Cleanup Object URL Blob saat komponen ditutup
+  useEffect(() => {
+    return () => {
+      itemsRincian.forEach(item => {
+        if (item.foto_preview && item.foto_preview.startsWith('blob:')) {
+          URL.revokeObjectURL(item.foto_preview);
+        }
+      });
+    };
+  }, []);
+
+  // Fetch Data Karyawan / Pegawai
   useEffect(() => {
     const fetchPegawai = async () => {
       try {
@@ -59,7 +70,7 @@ function DraftTorBarang() {
     fetchPegawai();
   }, []);
 
-  // 2. Auto-Fill Data Saat Mode Edit Draft
+  // Auto-Fill Data Saat Mode Edit Draft
   useEffect(() => {
     if (!draftId) return;
 
@@ -73,12 +84,10 @@ function DraftTorBarang() {
 
         const data = res.data.data || res.data;
 
-        // 👇 2. Ambil template_id dari draft lama kalau ada 👇
         if (data.template_id) {
           setSavedTemplateId(data.template_id);
         }
         
-        // Pembacaan fleksibel baik dari 'data_input' (drafts) maupun 'variables' (dokumen_cetak)
         let input = data.data_input || data.variables || {};
         if (typeof input === 'string') {
           try { input = JSON.parse(input); } catch (e) { input = {}; }
@@ -105,9 +114,7 @@ function DraftTorBarang() {
           jumlah_harga: String(data.jumlah_harga || input.jumlah_harga || data.item_barang?.jumlah_harga || '')
         });
 
-        // ======= 🚀 PERBAIKAN TOTAL TARIK FOTO DARI DATABASE =======
-        
-        // 1. Ambil data foto dari root 'data.foto', 'input.foto', atau 'data.foto_lama'
+        // Tarik Foto Dari Database
         let savedPhotos = [];
         try {
           const rawPhotos = data.foto || input.foto || data.foto_lama || data.lampiran;
@@ -120,13 +127,10 @@ function DraftTorBarang() {
           console.error("Gagal parse foto:", e);
         }
 
-        // 2. Fill Tabel Rincian & Pasangkan Foto berdasarkan Index
         const rincian = data.rincian_barang || input.rincian_barang || data.rincian || [];
         
         if (Array.isArray(rincian) && rincian.length > 0) {
           setItemsRincian(rincian.map((r, index) => {
-            
-            // Ambil path dari array foto utama berdasarkan indeks, atau dari r.foto
             let photoObjOrString = savedPhotos[index] || r.foto || r.foto_path || null;
             let pathString = '';
             let previewUrl = null;
@@ -138,10 +142,7 @@ function DraftTorBarang() {
             }
 
             if (pathString) {
-              // Bersihkan backslash dari format JSON
               const cleanPath = pathString.replace(/\\/g, '/').replace(/^\//, '');
-
-              // Hapus penambahan 'storage/' yang paksa. Langsung gabungkan URL.
               previewUrl = cleanPath.startsWith('http')
                 ? cleanPath
                 : `http://localhost:8000/${cleanPath}`;
@@ -151,7 +152,7 @@ function DraftTorBarang() {
               barang: r.barang || r.nama_barang || '',
               foto_file: null, 
               foto_preview: previewUrl, 
-              foto_path: pathString, // Amannya jalur string path tersimpan di sini
+              foto_path: pathString,
               qty: String(r.qty || '1'),
               satuan: r.satuan || 'Pcs',
               harga_satuan: String(r.harga_satuan || ''),
@@ -159,7 +160,6 @@ function DraftTorBarang() {
             };
           }));
         }
-        // ======= 🚀 PERBAIKAN SELESAI =======
 
       } catch (err) {
         console.error("Gagal mengambil detail draft lama:", err);
@@ -170,6 +170,8 @@ function DraftTorBarang() {
 
     fetchDetailDraft();
   }, [draftId]);
+
+  const grandTotalRincian = itemsRincian.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
 
   // Helper Auto-complete Karyawan
   const getFilteredPegawai = (query) => {
@@ -238,36 +240,30 @@ function DraftTorBarang() {
     setItemsRincian(itemsRincian.filter((_, i) => i !== index));
   };
 
-  // Pairing 2 Gambar Per Baris Untuk Layout Lampiran
+  // Pairing Gambar
   const lampiranPairs = itemsRincian.reduce((acc, item, i) => {
     if (i % 2 === 0) acc.push({ kiri: item, kanan: itemsRincian[i + 1] || null });
     return acc;
   }, []);
 
-  // ======= 🚀 PERBAIKAN: HELPER FORM DATA PAYLOAD =======
+  // HELPER FORM DATA PAYLOAD
   const createFormDataPayload = (status = 'draft') => {
     const data = new FormData();
     
-    // 1. Set Template ID & Status
     data.append('template_id', savedTemplateId);
     data.append('status', status);
 
-    // 2. Set Nama Draft & Nama Dokumen (Sinkron dengan backend)
     const namaDraftValue = formData.nama_draft.trim() 
       || (itemBarang.nama_barang ? `TOR - ${itemBarang.nama_barang}` : 'Draft TOR Barang');
     
     data.append('nama_draft', namaDraftValue);
-    data.append('nama_dokumen', namaDraftValue); // 👈 Penambahan properti nama_dokumen
+    data.append('nama_dokumen', namaDraftValue);
 
-    // 3. KUNCI PERBAIKAN BUG:
-    // Hanya masukkan draft_id dan _method PUT jika statusnya BENAR-BENAR 'draft'.
-    // Jika statusnya 'siap_cetak', JANGAN kirim draft_id agar backend tidak menghapus file/draft duluan.
     if (draftId && status === 'draft') {
       data.append('draft_id', draftId);
       data.append('_method', 'PUT');
     }
 
-    // BENTUK JSON VARIABLES YANG DISIMPAN KE DATABASE
     const variablesObject = {
       nama_draft: namaDraftValue,
       pengadaan: formData.pengadaan,
@@ -283,6 +279,7 @@ function DraftTorBarang() {
       qty: itemBarang.jumlah,
       harga_satuan: itemBarang.harga_satuan,
       jumlah_harga: itemBarang.jumlah_harga,
+      grand_total_rincian: grandTotalRincian.toString(),
       rincian_barang: itemsRincian.map(item => ({
         barang: item.barang,
         qty: item.qty,
@@ -295,18 +292,15 @@ function DraftTorBarang() {
 
     data.append('variables', JSON.stringify(variablesObject));
 
-    // Append raw data for backend
     Object.keys(formData).forEach(key => {
       if (key !== 'nama_draft') data.append(key, formData[key] ?? '');
     });
 
     Object.keys(itemBarang).forEach(key => data.append(key, itemBarang[key] ?? ''));
 
-    // Siapkan wadah untuk mengumpulkan path foto lama
     const fotoLamaArray = [];
 
     itemsRincian.forEach((item, index) => {
-      // Append text data rincian barang
       data.append(`rincian_barang[${index}][barang]`, item.barang ?? '');
       data.append(`rincian_barang[${index}][qty]`, item.qty ?? '');
       data.append(`rincian_barang[${index}][satuan]`, item.satuan ?? '');
@@ -314,10 +308,8 @@ function DraftTorBarang() {
       data.append(`rincian_barang[${index}][total]`, item.total ?? '');
       
       if (item.foto_file) {
-        // Kirim file fisik baru
         data.append(`foto[]`, item.foto_file); 
       } else if (item.foto_path) {
-        // Kumpulkan path foto lama
         fotoLamaArray.push({
           path: item.foto_path,
           keterangan: 'Foto Lampiran'
@@ -325,21 +317,18 @@ function DraftTorBarang() {
       }
     });
 
-    // Kirim foto lama sebagai JSON String
     if (fotoLamaArray.length > 0) {
       data.append('foto_lama', JSON.stringify(fotoLamaArray));
     }
 
     return data;
   };
-  // ======= 🚀 SELESAI PERBAIKAN PAYLOAD =======
 
   // Submit Simpan Ke Draft
   const handleSaveDraft = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     setLoading(true);
     
-    // Kirim dengan parameter status 'draft'
     const payload = createFormDataPayload('draft');
     const token = localStorage.getItem('token');
     
@@ -355,25 +344,29 @@ function DraftTorBarang() {
         'Accept': 'application/json'
       }
     })
-    .then(() => {
+    .then((res) => {
       setLoading(false);
-      alert("Dokumen berhasil disimpan ke draft!");
-      navigate('/draft-dokumen');
+      const savedId = res.data?.data?.id || res.data?.id || draftId;
+      
+      // Navigate dengan membawa state tab & highlightId
+      navigate('/draft-dokumen', {
+        state: { 
+          targetTab: 'tor_barang',
+          highlightId: savedId 
+        }
+      });
     })
     .catch(err => {
       console.error("Gagal simpan draft:", err);
-      const serverMsg = err.response?.data?.message || err.response?.data?.errors?.nama_draft?.[0];
-      alert(serverMsg || "Gagal menyimpan ke draft.");
       setLoading(false);
     });
   };
 
-  // Submit Final Siap Cetak
+  // SUBMIT FINAL SIAP CETAK (OTOMATIS HIGHLIGHT KE TOR BARANG)
   const handleSubmit = (e) => {
     e.preventDefault();
     setLoading(true);
 
-    // Kirim dengan parameter status 'siap_cetak'
     const payload = createFormDataPayload('siap_cetak');
     const token = localStorage.getItem('token');
 
@@ -384,24 +377,28 @@ function DraftTorBarang() {
         'Accept': 'application/json'
       }
     })
-    .then(() => {
-      // 👇 DISAMAKAN DENGAN PENYERAHAN 👇
-      // Hapus draft HANYA SETELAH siap-cetak berhasil dibuat (Promise Chain)
+    .then((res) => {
+      const createdId = res.data?.data?.id || res.data?.id;
+
       if (draftId) {
         return axios.delete(`http://localhost:8000/api/drafts/${draftId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
-        });
+        }).then(() => createdId);
       }
+      return createdId;
     })
-    .then(() => {
+    .then((createdId) => {
       setLoading(false);
-      alert("Dokumen berhasil diselesaikan dan masuk ke antrean siap cetak!");
-      navigate('/siap-cetak');
+      
+      navigate('/siap-cetak', {
+        state: { 
+          targetTab: 'tor_barang',
+          highlightId: createdId 
+        }
+      });
     })
     .catch(err => {
       console.error("Gagal submit dokumen:", err);
-      const serverMsg = err.response?.data?.message || err.response?.data?.errors?.variables?.[0] || err.response?.data?.errors?.nama_draft?.[0];
-      alert(serverMsg || "Gagal menyelesaikan dokumen.");
       setLoading(false);
     });
   };
@@ -435,7 +432,6 @@ function DraftTorBarang() {
       <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full custom-scrollbar">
         <div className="w-full max-w-6xl mx-auto space-y-6">
           
-          {/* HEADER DENGAN GRADIENT TEXT & TOMBOL KEMBALI KONSISTEN */}
           <header className="flex justify-between items-center">
             <h1 className="text-3xl font-black text-slate-800 tracking-tight">
               {draftId ? 'Edit Draft:' : 'Draft Baru:'}{' '}
@@ -457,13 +453,12 @@ function DraftTorBarang() {
             <div className="lg:col-span-7">
               <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                 
-                {/* BANNER INFORMASI SINKRONISASI */}
                 <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-sky-950 font-medium">
                   <span>🤖</span>
                   <p><b>Form Spesifikasi & Rincian Aktif!</b> Seluruh pengisian di bawah ini langsung terhubung dan tersinkronisasi ke berkas live preview secara real-time.</p>
                 </div>
 
-                {/* 0. Nama Draft */}
+                {/* Nama Draft */}
                 <div className="flex flex-col gap-1.5 border-b border-sky-100/80 pb-4">
                   <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider">📌 Nama Draft / Dokumen</label>
                   <input 
@@ -477,7 +472,7 @@ function DraftTorBarang() {
                   <p className="text-[10px] text-slate-400 italic">*Jika dikosongkan, nama draft otomatis dibuat dari nama barang.</p>
                 </div>
 
-                {/* 1. Pengadaan */}
+                {/* Pengadaan */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider">📝 1. Tujuan Pengadaan</label>
                   <textarea 
@@ -491,7 +486,7 @@ function DraftTorBarang() {
                   />
                 </div>
 
-                {/* 2. Spesifikasi Teknis */}
+                {/* Spesifikasi Teknis */}
                 <div className="space-y-3 border-t border-sky-100/80 pt-5">
                   <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider block">📦 2. Spesifikasi Teknis & Price</label>
                   <div className="p-5 rounded-2xl bg-[#F4F8FC]/50 border border-sky-100/80 space-y-3">
@@ -528,7 +523,7 @@ function DraftTorBarang() {
                   </div>
                 </div>
 
-                {/* 3. Tabel Rincian Barang */}
+                {/* Tabel Rincian Barang */}
                 <div className="space-y-3 border-t border-sky-100/80 pt-5">
                   <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider block">📋 3. Tabel Rincian Barang & Foto</label>
                   {itemsRincian.map((item, idx) => (
@@ -575,12 +570,16 @@ function DraftTorBarang() {
                       </div>
                     </div>
                   ))}
-                  <div className="flex justify-end">
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-sky-100/80 pt-3">
+                    <div className="text-xs font-extrabold text-sky-900 bg-sky-50 px-3 py-2 rounded-xl border border-sky-100">
+                      Total Keseluruhan Rincian: <span className="text-sky-600 font-extrabold">Rp {grandTotalRincian.toLocaleString('id-ID')}</span>
+                    </div>
                     <button type="button" onClick={addRincian} className="bg-sky-50/80 hover:bg-sky-100 text-sky-700 font-bold px-4 py-2 rounded-xl text-xs border border-sky-100/80 transition-all cursor-pointer transform hover:scale-105 active:scale-95 shadow-xs">+ Tambah Baris</button>
                   </div>
                 </div>
 
-                {/* 4. Penandatangan */}
+                {/* Penandatangan */}
                 <div className="space-y-3 border-t border-sky-100/80 pt-5">
                   <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider block">✍️ 4. Penandatangan / Pengesahan</label>
                   <div className="p-4 rounded-2xl bg-[#F4F8FC]/50 border border-sky-100/80 space-y-3">
@@ -607,7 +606,7 @@ function DraftTorBarang() {
                   </div>
                 </div>
 
-                {/* ACTION BUTTONS DENGAN STYLE KONSISTEN */}
+                {/* ACTION BUTTONS */}
                 <div className="pt-6 border-t border-sky-100/80 flex flex-wrap justify-end gap-3">
                   <button 
                     type="button" 
@@ -629,7 +628,7 @@ function DraftTorBarang() {
               </form>
             </div>
 
-            {/* LIVE PREVIEW DOKUMEN PANEL KANAN */}
+            {/* LIVE PREVIEW PANEL KANAN */}
             <div className="lg:col-span-5 bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-6 sticky top-6 h-[calc(100vh-140px)] flex flex-col">
               
               <div className="flex items-center justify-between pb-4 border-b border-sky-100/80 mb-3">
@@ -687,6 +686,12 @@ function DraftTorBarang() {
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-100 font-bold font-mono">
+                          <td colSpan={5} className="border border-slate-900 p-1 text-right uppercase">Total Keseluruhan:</td>
+                          <td className="border border-slate-900 p-1 font-bold text-sky-700">Rp {grandTotalRincian.toLocaleString('id-ID')}</td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 </div>

@@ -146,7 +146,7 @@ function DashboardMasterAdmin() {
   };
 
   // 🟢 3 Ikon untuk masing-masing Box
-  const statIcons = ['📁', '✨', '📄'];
+  const statIcons = ['📁', '📚', '📄'];
 
   return (
     <div 

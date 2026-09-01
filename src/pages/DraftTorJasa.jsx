@@ -9,6 +9,9 @@ function DraftTorJasa() {
   const templateId = searchParams.get('template_id');
   const draftId = searchParams.get('draft_id') || searchParams.get('id');
 
+  // State Template ID
+  const [savedTemplateId, setSavedTemplateId] = useState(templateId || '');
+
   const [loading, setLoading] = useState(false);
   const [daftarPegawai, setDaftarPegawai] = useState([]);
   const [activeDropdown, setActiveDropdown] = useState(null);
@@ -22,7 +25,7 @@ function DraftTorJasa() {
     bidang2: ''
   });
 
-  // State Spesifikasi Jasa / Pekerjaan (Point 2)
+  // State Spesifikasi Jasa / Pekerjaan
   const [itemJasa, setItemJasa] = useState({
     nama_jasa: '',
     ruang_lingkup: '',
@@ -51,7 +54,7 @@ function DraftTorJasa() {
     fetchPegawai();
   }, []);
 
-  // 2. Auto-Fill Data Saat Edit
+  // 2. Auto-Fill Data Saat Edit Draft
   useEffect(() => {
     if (!draftId) return;
 
@@ -64,13 +67,18 @@ function DraftTorJasa() {
         });
 
         const data = res.data.data || res.data;
+        
+        if (data.template_id) {
+          setSavedTemplateId(data.template_id);
+        }
+
         let input = data.data_input || data.variables || {};
         if (typeof input === 'string') {
           try { input = JSON.parse(input); } catch (e) { input = {}; }
         }
 
         setFormData({
-          pengadaan: data.pengadaan || input.pengadaan || '',
+          pengadaan: data.pengadaan || input.pengadaan || input.tujuan_pengadaan || input.TUJUAN_PENGADAAN || '',
           nama_penyerah: data.nama_penyerah || input.nama_penyerah || '',
           bidang1: data.bidang1 || input.bidang1 || '',
           nama_penerima: data.nama_penerima || input.nama_penerima || '',
@@ -78,14 +86,14 @@ function DraftTorJasa() {
         });
 
         setItemJasa({
-          nama_jasa: data.nama_jasa || input.nama_jasa || '',
-          ruang_lingkup: data.ruang_lingkup || input.ruang_lingkup || '',
-          spesifikasi: data.spesifikasi || input.spesifikasi || '',
-          persyaratan_tambahan: data.persyaratan_tambahan || input.persyaratan_tambahan || '',
+          nama_jasa: data.nama_jasa || input.nama_jasa || input.nama_pekerjaan || input.NAMA_JASA || '',
+          ruang_lingkup: data.ruang_lingkup || input.ruang_lingkup || input.RUANG_LINGKUP || '',
+          spesifikasi: data.spesifikasi || input.spesifikasi || input.SPESIFIKASI || '',
+          persyaratan_tambahan: data.persyaratan_tambahan || input.persyaratan_tambahan || input.PERSYARATAN_TAMBAHAN || '',
           jumlah: String(data.jumlah || input.jumlah || '1'),
-          rincian_biaya: data.rincian_biaya || input.rincian_biaya || '',
-          harga_satuan: String(data.harga_satuan || input.harga_satuan || ''),
-          jumlah_harga: String(data.jumlah_harga || input.jumlah_harga || '')
+          rincian_biaya: data.rincian_biaya || input.rincian_biaya || input.RINCIAN_BIAYA || '',
+          harga_satuan: String(data.harga_satuan || input.harga_satuan || input.HARGA_SATUAN || ''),
+          jumlah_harga: String(data.jumlah_harga || input.jumlah_harga || input.JUMLAH_HARGA || '')
         });
 
       } catch (err) {
@@ -127,89 +135,169 @@ function DraftTorJasa() {
     setItemJasa(updated);
   };
 
+  // PEMBUATAN PAYLOAD
   const createFormDataPayload = (status = 'draft') => {
     const data = new FormData();
-    data.append('template_id', templateId || '');
+    data.append('template_id', savedTemplateId || templateId || '');
     data.append('status', status);
 
-    if (draftId) {
+    // Set Kategori & Jenis Dokumen secara eksplisit
+    data.append('kategori', 'tor_jasa');
+    data.append('jenis_dokumen', 'tor_jasa');
+    data.append('tipe_dokumen', 'tor_jasa');
+
+    if (draftId && status === 'draft') {
       data.append('draft_id', draftId);
       data.append('_method', 'PUT');
     }
 
-    // Nama draft otomatis dikirim berdasarkan nama jasa
     const namaDraftValue = itemJasa.nama_jasa.trim() 
       ? `TOR Jasa - ${itemJasa.nama_jasa}` 
       : 'Draft TOR Jasa';
     
     data.append('nama_draft', namaDraftValue);
+    data.append('nama_dokumen', namaDraftValue);
 
     const variablesObject = {
+      kategori: 'tor_jasa',
+      jenis_dokumen: 'tor_jasa',
       nama_draft: namaDraftValue,
+
       pengadaan: formData.pengadaan,
+      tujuan: formData.pengadaan,
+      tujuan_pengadaan: formData.pengadaan,
+      TUJUAN_PENGADAAN: formData.pengadaan,
+
       nama_penyerah: formData.nama_penyerah,
+      NAMA_PENYERAH: formData.nama_penyerah,
       bidang1: formData.bidang1,
-      nama_penerima: formData.nama_penerima,
-      bidang2: formData.bidang2,
+      BIDANG1: formData.bidang1,
       
-      // Variable Jasa
+      nama_penerima: formData.nama_penerima,
+      NAMA_PENERIMA: formData.nama_penerima,
+      bidang2: formData.bidang2,
+      BIDANG2: formData.bidang2,
+      
       nama_jasa: itemJasa.nama_jasa,
+      NAMA_JASA: itemJasa.nama_jasa,
+      nama_pekerjaan: itemJasa.nama_jasa,
+      NAMA_PEKERJAAN: itemJasa.nama_jasa,
+
       ruang_lingkup: itemJasa.ruang_lingkup,
+      RUANG_LINGKUP: itemJasa.ruang_lingkup,
+
       spesifikasi: itemJasa.spesifikasi,
+      SPESIFIKASI: itemJasa.spesifikasi,
+
       persyaratan_tambahan: itemJasa.persyaratan_tambahan,
+      PERSYARATAN_TAMBAHAN: itemJasa.persyaratan_tambahan,
+
       jumlah: itemJasa.jumlah,
+      JUMLAH: itemJasa.jumlah,
+
       rincian_biaya: itemJasa.rincian_biaya,
+      RINCIAN_BIAYA: itemJasa.rincian_biaya,
+
       harga_satuan: itemJasa.harga_satuan,
-      jumlah_harga: itemJasa.jumlah_harga
+      HARGA_SATUAN: itemJasa.harga_satuan,
+
+      jumlah_harga: itemJasa.jumlah_harga,
+      JUMLAH_HARGA: itemJasa.jumlah_harga
     };
 
     data.append('variables', JSON.stringify(variablesObject));
 
-    Object.keys(formData).forEach(key => data.append(key, formData[key]));
-    Object.keys(itemJasa).forEach(key => data.append(key, itemJasa[key]));
+    Object.keys(formData).forEach(key => data.append(key, formData[key] ?? ''));
+    Object.keys(itemJasa).forEach(key => data.append(key, itemJasa[key] ?? ''));
+
+    data.append('tujuan_pengadaan', formData.pengadaan ?? '');
+    data.append('TUJUAN_PENGADAAN', formData.pengadaan ?? '');
+    data.append('NAMA_JASA', itemJasa.nama_jasa ?? '');
 
     return data;
   };
 
-  const handleSaveDraft = async () => {
+  // Simpan Draft
+  const handleSaveDraft = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     setLoading(true);
-    try {
-      const payload = createFormDataPayload('draft');
-      const token = localStorage.getItem('token');
-      const endpoint = draftId ? `http://localhost:8000/api/drafts/${draftId}` : 'http://localhost:8000/api/drafts';
-      
-      await axios.post(endpoint, payload, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
-      });
-
-      alert("Draft TOR Jasa berhasil disimpan!");
-      navigate('/draft-dokumen');
-    } catch (err) {
-      alert(err.response?.data?.message || "Gagal menyimpan draft.");
-    } finally {
+    
+    const payload = createFormDataPayload('draft');
+    const token = localStorage.getItem('token');
+    const endpoint = draftId ? `http://localhost:8000/api/drafts/${draftId}` : 'http://localhost:8000/api/drafts';
+    
+    axios({
+      method: 'post',
+      url: endpoint,
+      data: payload,
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      }
+    })
+    .then((res) => {
+      const savedId = res.data?.data?.id || res.data?.id || draftId;
       setLoading(false);
-    }
+
+      // Meluncur ke tab TOR Jasa & menyorot item draf yang baru disimpan
+      navigate('/draft-dokumen', {
+        state: { 
+          targetTab: 'tor_jasa',
+          highlightId: savedId 
+        }
+      });
+    })
+    .catch(err => {
+      console.error("Gagal simpan draft:", err);
+      alert(err.response?.data?.message || "Gagal menyimpan draft.");
+      setLoading(false);
+    });
   };
 
-  const handleSubmit = async (e) => {
+  // Submit Final (Siap Cetak)
+  const handleSubmit = (e) => {
     e.preventDefault();
     setLoading(true);
-    try {
-      const payload = createFormDataPayload('siap_cetak');
-      const token = localStorage.getItem('token');
-      const endpoint = draftId ? `http://localhost:8000/api/siap-cetak/${draftId}` : 'http://localhost:8000/api/siap-cetak';
 
-      await axios.post(endpoint, payload, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
-      });
+    const payload = createFormDataPayload('siap_cetak');
+    const token = localStorage.getItem('token');
 
-      alert("Dokumen TOR Jasa berhasil dikirim ke antrean siap cetak!");
-      navigate('/siap-cetak');
-    } catch (err) {
-      alert(err.response?.data?.message || "Gagal menyelesaikan dokumen.");
-    } finally {
+    axios.post(`http://localhost:8000/api/siap-cetak`, payload, {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      }
+    })
+    .then((res) => {
+      const createdId = res.data?.data?.id || res.data?.id;
+
+      if (draftId) {
+        return axios.delete(`http://localhost:8000/api/drafts/${draftId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }).then(() => createdId);
+      }
+      return createdId;
+    })
+    .then((createdId) => {
       setLoading(false);
-    }
+      
+      navigate('/siap-cetak', {
+        state: { 
+          tab: 'tor_jasa',
+          activeTab: 'tor_jasa',
+          targetTab: 'tor_jasa',
+          highlightId: createdId 
+        }
+      });
+    })
+    .catch(err => {
+      console.error("Gagal submit dokumen:", err);
+      const serverMsg = err.response?.data?.message || err.response?.data?.errors?.variables?.[0] || err.response?.data?.errors?.nama_draft?.[0];
+      alert(serverMsg || "Gagal menyelesaikan dokumen.");
+      setLoading(false);
+    });
   };
 
   const renderKaryawanDropdown = (type, query) => {
@@ -262,7 +350,6 @@ function DraftTorJasa() {
             <div className="lg:col-span-7">
               <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                 
-                {/* BANNER INFORMASI SINKRONISASI */}
                 <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-sky-950 font-medium">
                   <span>🤖</span>
                   <p><b>Form Spesifikasi Jasa Aktif!</b> Seluruh pengisian di bawah ini langsung terhubung dan tersinkronisasi ke berkas live preview secara real-time.</p>

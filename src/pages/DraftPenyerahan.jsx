@@ -22,9 +22,9 @@ function DraftPenyerahan() {
   const [loadingSelesai, setLoadingSelesai] = useState(false); 
 
   // 🖼️ STATE FOTO: Dipisah antara foto lama (DB) & foto baru (Upload)
-  const [existingPhotos, setExistingPhotos] = useState([]); // Foto dari DB
-  const [photoFiles, setPhotoFiles] = useState([]);         // File baru dari input
-  const [filePreviews, setFilePreviews] = useState({});     // Penampung preview gabungan
+  const [existingPhotos, setExistingPhotos] = useState([]); 
+  const [photoFiles, setPhotoFiles] = useState([]);         
+  const [filePreviews, setFilePreviews] = useState({});     
   const filePreviewsRef = useRef({});
 
   // State untuk Tabel Barang / Item Dokumen
@@ -50,7 +50,6 @@ function DraftPenyerahan() {
 
     const newPreviews = {};
 
-    // 1. Foto Lama dari DB
     existingList.forEach((item, index) => {
       const varName = `foto_${index + 1}`;
       let src = item.full_url;
@@ -63,7 +62,6 @@ function DraftPenyerahan() {
       newPreviews[varName] = src;
     });
 
-    // 2. Foto Baru dari File Input
     newFileList.forEach((file, index) => {
       const varName = `foto_${existingList.length + index + 1}`;
       newPreviews[varName] = URL.createObjectURL(file);
@@ -122,7 +120,6 @@ function DraftPenyerahan() {
           setCalendarDate(`${yyyy}-${mm}-${dd}`);
           setFormData(initialFormState);
 
-          // 💡 MUAT FOTO LAMA DARI DATABASE KE STATE PREVIEW
           let fotoLamaList = [];
           if (Array.isArray(dataLama.foto)) {
             fotoLamaList = dataLama.foto;
@@ -193,7 +190,7 @@ function DraftPenyerahan() {
       }
     })
       .then(res => {
-        const draftData = res.data.data;
+        const draftData = res.data.data || res.data;
         setNamaDraft(draftData.nama_draft);
         setCurrentTemplateId(draftData.template_id);
 
@@ -288,7 +285,6 @@ function DraftPenyerahan() {
     }
   };
 
-  // 🖼️ MANAJEMEN FOTO BARU
   const handleMultipleFileChange = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
@@ -300,14 +296,12 @@ function DraftPenyerahan() {
     e.target.value = '';
   };
 
-  // 🗑️ HAPUS FOTO LAMA (DB)
   const handleRemoveExistingPhoto = (indexToRemove) => {
     const updatedExisting = existingPhotos.filter((_, idx) => idx !== indexToRemove);
     setExistingPhotos(updatedExisting);
     syncPhotoPreviews(updatedExisting, photoFiles);
   };
 
-  // 🗑️ HAPUS FOTO BARU (UPLOAD)
   const handleRemoveNewPhoto = (indexToRemove) => {
     const updatedNew = photoFiles.filter((_, idx) => idx !== indexToRemove);
     setPhotoFiles(updatedNew);
@@ -336,14 +330,12 @@ function DraftPenyerahan() {
     }
   };
 
-  // 🚀 GENERATE FORM DATA (SUPPORTS EXISTING + NEW PHOTOS)
   const generateMultipartData = () => {
     const data = new FormData();
     data.append('template_id', currentTemplateId);
     data.append('nama_dokumen', namaDraft);
     data.append('nama_draft', namaDraft);
 
-    // 1. Variabel biasa
     Object.keys(formData).forEach(key => {
       const item = formData[key];
       if (key !== 'foto' && !key.startsWith('foto_') && !(item instanceof File)) {
@@ -352,10 +344,8 @@ function DraftPenyerahan() {
       }
     });
 
-    // 2. Kirim sisa Foto Lama (JSON)
     data.append('foto_lama', JSON.stringify(existingPhotos));
 
-    // 3. Kirim File Foto Baru
     if (photoFiles && photoFiles.length > 0) {
       photoFiles.forEach(file => {
         data.append('foto[]', file);
@@ -365,7 +355,6 @@ function DraftPenyerahan() {
     return data;
   };
 
-  // 1. SIMPAN DRAFT
   const handleSaveDraft = (e) => {
     e.preventDefault();
     setLoadingDraft(true);
@@ -391,9 +380,14 @@ function DraftPenyerahan() {
         'Accept': 'application/json'
       }
     })
-    .then(() => {
+    .then((res) => {
       setLoadingDraft(false);
-      navigate('/draft-dokumen'); 
+      const savedId = res.data?.id || res.data?.data?.id || draftIdParam;
+      if (savedId) {
+        navigate(`/draft-dokumen?highlight_id=${savedId}`);
+      } else {
+        navigate('/draft-dokumen');
+      }
     })
     .catch(err => {
       console.error("Gagal menyimpan draft:", err);
@@ -401,7 +395,6 @@ function DraftPenyerahan() {
     });
   };
 
-  // 2. SELESAI & KIRIM
   const handleSelesai = (e) => {
     e.preventDefault();
     setLoadingSelesai(true);
@@ -417,16 +410,26 @@ function DraftPenyerahan() {
         'Accept': 'application/json'
       }
     })
-    .then(() => {
+    .then((res) => {
+      const dataDokumen = res.data?.data || res.data;
+      const savedId = dataDokumen?.id || dataDokumen?.nama_dokumen || namaDraft;
+
       if (draftIdParam) {
         return axios.delete(`${BACKEND_URL}/api/drafts/${draftIdParam}`, {
           headers: { 'Authorization': `Bearer ${token}` }
-        });
+        }).then(() => savedId);
       }
+      return savedId;
     })
-    .then(() => {
+    .then((targetId) => {
       setLoadingSelesai(false);
-      navigate('/siap-cetak'); 
+      navigate(`/siap-cetak?highlight=${encodeURIComponent(targetId)}&tab=ba_penyerahan`, {
+        state: { 
+          highlightId: targetId,
+          highlight_id: targetId,
+          targetTab: 'ba_penyerahan'
+        }
+      });
     })
     .catch(err => {
       console.error("Gagal mengirim dokumen:", err);
@@ -438,7 +441,6 @@ function DraftPenyerahan() {
     return text.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
-  // LIVE PREVIEW DENGAN PREVIEW GABUNGAN
   const renderLivePreview = () => {
     if (!textContent) {
       return <p className="text-slate-400 italic text-center py-10">Memuat teks preview...</p>;
@@ -493,6 +495,38 @@ function DraftPenyerahan() {
       processedHTML = processedHTML.replaceAll('${bulan}', `<span class="text-sky-600 font-bold">${userValueBulan}</span>`);
     }
 
+    const penyerahNama = formData['nama_penyerah'] || '(........................)';
+    const penyerahJabatan = formData['jabatan1'] || 'Yang Menyerahkan';
+    const penerimaNama = formData['nama_penerima'] || '(........................)';
+    const penerimaJabatan = formData['jabatan2'] || 'Yang Menerima';
+
+    const ttpHtml = `
+      <div class="mt-8 pt-4 border-t border-slate-200">
+        <table className="w-full border-0 text-center text-xs" style="width: 100%; margin-top: 20px;">
+          <tbody>
+            <tr>
+              <td style="width: 50%; text-align: center; vertical-align: top; border: none; padding: 10px;">
+                <p class="font-bold text-slate-700">${penyerahJabatan}</p>
+                <div style="height: 60px;"></div>
+                <p class="font-extrabold text-sky-600 underline">${penyerahNama}</p>
+              </td>
+              <td style="width: 50%; text-align: center; vertical-align: top; border: none; padding: 10px;">
+                <p class="font-bold text-slate-700">${penerimaJabatan}</p>
+                <div style="height: 60px;"></div>
+                <p class="font-extrabold text-sky-600 underline">${penerimaNama}</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    if (processedHTML.includes('${tanda_tangan}') || processedHTML.includes('${ttd}')) {
+      processedHTML = processedHTML.replaceAll('${tanda_tangan}', ttpHtml).replaceAll('${ttd}', ttpHtml);
+    } else {
+      processedHTML += ttpHtml;
+    }
+
     return (
       <div dangerouslySetInnerHTML={{ __html: processedHTML }} className="text-slate-700 leading-relaxed space-y-3 whitespace-pre-line break-words text-xs tracking-normal [&_table]:!w-auto [&_table]:!max-w-full [&_td]:!p-2 [&_table]:border-collapse [&_table]:border [&_table]:border-slate-200 [&_td]:border [&_td]:border-slate-200 [&_th]:border [&_th]:border-slate-200 [&_th]:bg-slate-50" />
     );
@@ -535,7 +569,7 @@ function DraftPenyerahan() {
                 <form onSubmit={handleSelesai} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                   
                   <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-sky-950 font-medium">
-                    <span>🤖</span>
+                    <span className="text-lg">🤖</span>
                     <p><b>Sinkronisasi Kalender & Form Aktif!</b> Input data di bawah langsung tersinkronisasi ke berkas preview secara real-time.</p>
                   </div>
 
@@ -620,13 +654,14 @@ function DraftPenyerahan() {
                       })}
                   </div>
 
-                  {/* 🖼️ SECTION UPLOAD & PREVIEW FOTO (GABUNGAN FOTO LAMA + BARU) */}
+                  {/* 🖼️ SECTION UPLOAD & PREVIEW FOTO */}
                   <div className="md:col-span-2 flex flex-col gap-1.5 border-t border-sky-100 pt-4">
                     <div className="flex justify-between items-center">
                       <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
                         Upload Foto Dokumentasi <span className="text-slate-400 font-normal lowercase">(Dapat menambah/menghapus per foto)</span>
                       </label>
-                      <span className="text-xs font-bold text-sky-600">
+                      {/* 1. KOTAK KECIL BIRU DIBAWAH INI (ANIMASI DIHAPUS) */}
+                      <span className="text-xs font-extrabold bg-blue-600 text-white px-2.5 py-1 rounded-full shadow-sm">
                         {totalFotoCount} foto terdaftar
                       </span>
                     </div>
@@ -640,10 +675,8 @@ function DraftPenyerahan() {
                         className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer flex-1"
                       />
 
-                      {/* AREA PREVIEW GABUNGAN (FOTO LAMA DB + FOTO BARU UPLOAD) */}
                       {totalFotoCount > 0 && (
                         <div className="flex flex-wrap gap-3 mt-2">
-                          {/* 1. Foto Lama dari Database */}
                           {existingPhotos.map((item, index) => {
                             const key = `foto_${index + 1}`;
                             const previewUrl = filePreviews[key];
@@ -667,14 +700,14 @@ function DraftPenyerahan() {
                                 >
                                   ✕
                                 </button>
-                                <span className="absolute bottom-1 right-1 bg-blue-600/90 backdrop-blur-xs text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold">
+                                {/* 2. KOTAK KECIL BIRU PADA FOTO DB DIBAWAH INI (ANIMASI DIHAPUS) */}
+                                <span className="absolute bottom-1 right-1 bg-blue-600 text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold shadow-xs">
                                   DB F{index + 1}
                                 </span>
                               </div>
                             );
                           })}
 
-                          {/* 2. Foto Baru dari File Input */}
                           {photoFiles.map((file, index) => {
                             const key = `foto_${existingPhotos.length + index + 1}`;
                             const previewUrl = filePreviews[key];
@@ -734,7 +767,10 @@ function DraftPenyerahan() {
                     <span className="text-base">📄</span>
                     <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Live Document Preview</h3>
                   </div>
-                  <span className="text-[10px] bg-sky-50 text-sky-600 font-bold px-2.5 py-1 rounded-full border border-sky-100">Auto Sync</span>
+                  {/* 3. KOTAK KECIL BIRU "Auto Sync" DIBAWAH INI (ANIMASI DIHAPUS) */}
+                  <span className="text-[10px] bg-blue-600 text-white font-bold px-3 py-1 rounded-full shadow-md">
+                    Auto Sync
+                  </span>
                 </div>
 
                 <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-3.5 mb-3 flex items-start gap-2.5 text-[11px] leading-relaxed text-sky-950 font-medium">

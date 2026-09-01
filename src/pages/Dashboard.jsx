@@ -117,14 +117,22 @@ function Dashboard() {
     }
   };
 
-  // 🌟 FUNGSI: Navigasi langsung ke Arsip History saat dokumen diklik
-  const handleGoToArsip = (dokumen) => {
-    if (!dokumen) return;
+  // 🌟 FUNGSI PERBAIKAN: Navigasi langsung ke Arsip History beserta Tab yang sesuai (LENGKAP & AMAN ID)
+  const handleGoToArsip = (dokumen, template) => {
+    if (!dokumen || !template) return;
     
-    navigate(`/arsip-history?highlight=${dokumen.id_dokumen}`, {
+    // Ambil ID dokumen secara fleksibel (mencegah 'undefined')
+    const docId = dokumen.id_dokumen || dokumen.id || dokumen.arsip_id;
+
+    // Auto-generate nama tab (Contoh: "BA Kerusakan" jadi "ba_kerusakan")
+    const formatTab = template.nama_template ? template.nama_template.toLowerCase().replace(/\s+/g, '_') : '';
+
+    navigate(`/arsip-history?highlight=${docId}`, {
       state: { 
-        highlightId: dokumen.id_dokumen,
-        nomorDokumen: dokumen.nomor_dokumen 
+        highlightId: docId,
+        nomorDokumen: dokumen.nomor_dokumen || dokumen.nama_dokumen,
+        targetTab: formatTab, // Info tambahan buat halaman arsip pindah tab
+        kategori: formatTab   // Info backup jika arsip pakai variabel 'kategori'
       }
     });
   };
@@ -165,7 +173,7 @@ function Dashboard() {
     fetchDashboardData();
   }, []);
 
-  const statIcons = ['📁', '✨'];
+  const statIcons = ['📁', '📚'];
 
   return (
     <div 
@@ -273,7 +281,7 @@ function Dashboard() {
                     {/* Bagian Tengah: Detail Berkas Terakhir Milik User */}
                     {tpl.dokumen_terakhir ? (
                       <div 
-                        onClick={() => handleGoToArsip(tpl.dokumen_terakhir)}
+                        onClick={() => handleGoToArsip(tpl.dokumen_terakhir, tpl)}
                         title="📂 Klik untuk melihat & menandai dokumen ini di Halaman Arsip Sah"
                         className="flex-1 bg-white p-3.5 rounded-xl border border-sky-100 space-y-1.5 shadow-2xs cursor-pointer transform transition-all duration-300 hover:scale-[1.025] hover:-translate-y-0.5 hover:shadow-lg hover:shadow-sky-100/80 hover:border-sky-400 hover:ring-2 hover:ring-sky-100/80 active:scale-95 active:translate-y-0 group select-none"
                       >

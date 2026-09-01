@@ -8,7 +8,7 @@ function FileTemplate() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // 👑 1. Ambil role user dari localStorage
+  // 👑 Ambil role user dari localStorage
   const userRole = localStorage.getItem('role');
 
   // STATE UNTUK FITUR UPLOAD MODAL
@@ -17,6 +17,36 @@ function FileTemplate() {
   const [jenisDokumenId, setJenisDokumenId] = useState(1); 
   const [fileTemplate, setFileTemplate] = useState(null);
   const [loadingUpload, setLoadingUpload] = useState(false);
+
+  // STATE UNTUK MODAL HAPUS
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null); // { id, nama }
+  const [loadingDelete, setLoadingDelete] = useState(false);
+
+  // 🌟 STATE POP-UP MODAL REACT (NOTIFIKASI SUKSES & ERROR/WARNING)
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [successModalData, setSuccessModalData] = useState({ title: '', message: '' });
+
+  const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
+  const [errorModalData, setErrorModalData] = useState({ title: '', message: '' });
+
+  // HELPER SHOW NOTIFIKASI SUKSES (AUTO-CLOSE 1.5 DETIK)
+  const triggerSuccessModal = (title, message) => {
+    setSuccessModalData({ title, message });
+    setIsSuccessModalOpen(true);
+    setTimeout(() => {
+      setIsSuccessModalOpen(false);
+    }, 1500);
+  };
+
+  // HELPER SHOW NOTIFIKASI ERROR/PERINGATAN (AUTO-CLOSE 2 DETIK)
+  const triggerErrorModal = (title, message) => {
+    setErrorModalData({ title, message });
+    setIsErrorModalOpen(true);
+    setTimeout(() => {
+      setIsErrorModalOpen(false);
+    }, 2000);
+  };
 
   // Ambil data master template dari API saat halaman dibuka
   useEffect(() => {
@@ -34,8 +64,6 @@ function FileTemplate() {
       }
     })
       .then(res => {
-        console.log("Isi data dari API kamu:", res.data);
-
         if (res.data && Array.isArray(res.data.data)) {
           setTemplates(res.data.data);
         } else if (Array.isArray(res.data)) {
@@ -51,7 +79,7 @@ function FileTemplate() {
         setLoading(false);
       })
       .catch(err => {
-        console.error("Waduh eror pas ambil data template:", err);
+        console.error("Gagal ambil data template:", err);
         setLoading(false);
       });
   };
@@ -61,7 +89,7 @@ function FileTemplate() {
     e.preventDefault();
     
     if (!fileTemplate) {
-      alert("Pilih file .docx-nya dulu ya! 📁");
+      triggerErrorModal('File Belum Dipilih', 'Pilih file .docx-nya dulu ya! 📁');
       return;
     }
 
@@ -87,35 +115,49 @@ function FileTemplate() {
       setFileTemplate(null);
       setIsModalOpen(false);
       
+      triggerSuccessModal('Berhasil Upload!', 'Template baru berhasil ditambahkan.');
       ambilDataTemplate();
 
     } catch (error) {
       console.error("Gagal upload template:", error);
-      alert("Aduh gagal upload! Periksa validasi Laravel atau koneksi database kamu ya.");
+      triggerErrorModal('Upload Gagal', 'Periksa validasi backend atau koneksi database kamu.');
     } finally {
       setLoadingUpload(false);
     }
   };
 
-  // Fungsi Aksi Hapus Template
-  const handleHapus = (id, nama) => {
-    if (window.confirm(`Apakah kamu yakin ingin menghapus template "${nama}"?`)) {
-      const token = localStorage.getItem('token');
+  // FUNGSI BUKA MODAL CONFIRM HAPUS
+  const handleOpenDeleteModal = (id, nama) => {
+    setItemToDelete({ id, nama });
+    setIsDeleteModalOpen(true);
+  };
 
-      axios.delete(`http://localhost:8000/api/templates/${id}`, {
+  // FUNGSI EKSEKUSI HAPUS DARI MODAL
+  const executeHapus = async () => {
+    if (!itemToDelete) return;
+    setLoadingDelete(true);
+
+    const token = localStorage.getItem('token');
+
+    try {
+      await axios.delete(`http://localhost:8000/api/templates/${itemToDelete.id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
         }
-      })
-        .then(res => {
-          alert("🗑️ Template berhasil dihapus!");
-          ambilDataTemplate(); 
-        })
-        .catch(err => {
-          console.error("Gagal menghapus:", err);
-          alert("Gagal menghapus template!");
-        });
+      });
+
+      setIsDeleteModalOpen(false);
+      setItemToDelete(null);
+
+      triggerSuccessModal('Template Terhapus!', 'Template berhasil dihapus dari sistem.');
+      ambilDataTemplate();
+    } catch (err) {
+      console.error("Gagal menghapus:", err);
+      setIsDeleteModalOpen(false);
+      triggerErrorModal('Gagal Hapus', 'Terjadi kesalahan saat menghapus template.');
+    } finally {
+      setLoadingDelete(false);
     }
   };
 
@@ -131,6 +173,36 @@ function FileTemplate() {
       style={{ fontFamily: "'Poppins', sans-serif" }}
     >
       <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+      
+      {/* 🌟 CSS ANIMASI & KEYFRAMES PRESISI */}
+      <style>{`
+        @keyframes popIn {
+          0% {
+            opacity: 0;
+            transform: scale(0.7);
+          }
+          70% {
+            transform: scale(1.03);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        .animate-pop {
+          animation: popIn 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes drawCheck {
+          0% { stroke-dashoffset: 50; }
+          100% { stroke-dashoffset: 0; }
+        }
+        .animate-check {
+          stroke-dasharray: 50;
+          stroke-dashoffset: 50;
+          animation: drawCheck 0.4s ease-in-out 0.1s forwards;
+        }
+      `}</style>
       
       <Sidebar />
 
@@ -199,7 +271,7 @@ function FileTemplate() {
                         📄
                       </div>
                       
-                      {/* 🌟 BADGE DEN GAN WARNA SERAGAM BIRU SURAT TUGAS */}
+                      {/* BADGE CATEGORY */}
                       <span className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold uppercase tracking-wide border shadow-2xs bg-sky-100/80 text-sky-700 border-sky-200/60">
                         {t.jenis_dokumen_id === 2 
                           ? '⚠️ Kerusakan' 
@@ -246,7 +318,7 @@ function FileTemplate() {
 
                     {userRole === 'master_admin' && (
                       <button 
-                        onClick={() => handleHapus(t.id, t.nama)}
+                        onClick={() => handleOpenDeleteModal(t.id, t.nama)}
                         className="bg-rose-50/80 hover:bg-rose-500 text-rose-500 hover:text-white py-2.5 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 border border-rose-100 hover:border-transparent cursor-pointer active:scale-95"
                       >
                         Hapus
@@ -260,10 +332,98 @@ function FileTemplate() {
         </div>
       </main>
 
+      {/* 🌟 1. POP-UP MODAL KONFIRMASI HAPUS TEMPLATE (KONSISTEN 1:1) */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 transition-all">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-sky-100 w-[340px] p-6 text-center space-y-4 animate-pop relative">
+            
+            <div className="w-14 h-14 bg-amber-100/80 text-amber-500 rounded-2xl flex items-center justify-center text-2xl mx-auto border border-amber-200/60 shadow-xs">
+              ⚠️
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-base font-extrabold text-slate-800 tracking-tight">
+                Hapus Template?
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                Apakah Anda yakin ingin menghapus <br />
+                <span className="font-bold text-slate-700">"{itemToDelete?.nama}"</span>?
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setItemToDelete(null);
+                }}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-2xl text-xs transition-all active:scale-95 cursor-pointer"
+              >
+                Batal
+              </button>
+
+              <button
+                type="button"
+                onClick={executeHapus}
+                disabled={loadingDelete}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-2xl text-xs shadow-md shadow-red-200 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+              >
+                {loadingDelete ? "Menghapus..." : "Ya, Hapus"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🌟 2. POP-UP MODAL NOTIFIKASI SUKSES (PRESISI 1:1 DENGAN DRAFT DOKUMEN & ANTI-STUCK) */}
+      {isSuccessModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 transition-all">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-sky-100 w-[340px] p-6 text-center space-y-4 animate-pop relative">
+            
+            <div className="w-14 h-14 bg-emerald-100/90 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto border border-emerald-200/60 shadow-xs">
+              <svg className="w-7 h-7 text-emerald-500" fill="none" stroke="currentColor" strokeWidth="3.5" viewBox="0 0 24 24">
+                <path className="animate-check" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
+
+            <div className="space-y-1.5 pb-2">
+              <h3 className="text-base font-extrabold text-slate-800 tracking-tight">
+                {successModalData.title}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                {successModalData.message}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🌟 3. POP-UP MODAL PERINGATAN / ERROR (PRESISI 1:1) */}
+      {isErrorModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 transition-all">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-sky-100 w-[340px] p-6 text-center space-y-4 animate-pop relative">
+            
+            <div className="w-14 h-14 bg-rose-100/90 text-rose-500 rounded-2xl flex items-center justify-center text-2xl mx-auto border border-rose-200/60 shadow-xs">
+              ⚠️
+            </div>
+
+            <div className="space-y-1.5 pb-2">
+              <h3 className="text-base font-extrabold text-slate-800 tracking-tight">
+                {errorModalData.title}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                {errorModalData.message}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* POP-UP MODAL UNTUK UPLOAD TEMPLATE */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 transition-all duration-300 animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl border border-sky-100 w-full max-w-md overflow-hidden p-6 space-y-6 relative transform transition-all">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 transition-all duration-300">
+          <div className="bg-white rounded-3xl shadow-2xl border border-sky-100 w-full max-w-md overflow-hidden p-6 space-y-6 relative animate-pop">
             
             <div className="flex justify-between items-center border-b border-sky-100 pb-3">
               <div>
@@ -311,7 +471,7 @@ function FileTemplate() {
                 </select>
               </div>
 
-              {/* 🌟 FRAME FILE INPUT + TOMBOL HAPUS BERKAS */}
+              {/* FRAME FILE INPUT + TOMBOL HAPUS BERKAS */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">File Microsoft Word (.docx)</label>
                 

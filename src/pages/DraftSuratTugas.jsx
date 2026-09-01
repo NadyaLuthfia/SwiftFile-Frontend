@@ -21,6 +21,11 @@ function DraftSuratTugas() {
   const [loadingDraft, setLoadingDraft] = useState(false); 
   const [loadingSelesai, setLoadingSelesai] = useState(false); 
 
+  // WADAH BARU: State khusus penyimpan ID pembuat asli & ID Penanggung
+  const [creatorId, setCreatorId] = useState(null);
+  const [penanggungId, setPenanggungId] = useState(null); 
+  const [currentLoginId, setCurrentLoginId] = useState(null);
+
   // State Preview Foto di Frontend
   const [filePreviews, setFilePreviews] = useState({});
 
@@ -96,6 +101,10 @@ function DraftSuratTugas() {
         setNamaDraft(draftData.nama_draft);
         setCurrentTemplateId(draftData.template_id);
 
+        setCreatorId(draftData.user_id); 
+        setPenanggungId(draftData.assigned_to_id || null);
+        setCurrentLoginId(res.data.current_user_id);
+
         let dataInputSebelumnya = draftData.data_input;
         if (typeof dataInputSebelumnya === 'string') {
           dataInputSebelumnya = JSON.parse(dataInputSebelumnya);
@@ -109,7 +118,6 @@ function DraftSuratTugas() {
       })
       .catch(err => {
         console.error("Gagal memuat detail draft:", err);
-        alert("Draft tidak ditemukan atau telah dihapus.");
         setLoadingFetch(false);
       });
   };
@@ -313,6 +321,9 @@ function DraftSuratTugas() {
   const pilihKepalaBidang = (karyawan) => {
     setFormData(prev => ({ ...prev, kepala_bidang: karyawan.nama_lengkap }));
     setShowKepalaBidangDropdown(false);
+    if (karyawan.user_id || karyawan.id) {
+      setPenanggungId(karyawan.user_id || karyawan.id);
+    }
   };
 
   const pilihKepalaCabang = (karyawan) => {
@@ -325,6 +336,10 @@ function DraftSuratTugas() {
     data.append('template_id', currentTemplateId);
     data.append('nama_dokumen', namaDraft);
     data.append('nama_draft', namaDraft);
+
+    if (penanggungId) {
+      data.append('assigned_to_id', penanggungId);
+    }
 
     Object.keys(formData).forEach(key => {
       const item = formData[key];
@@ -339,7 +354,7 @@ function DraftSuratTugas() {
     return data;
   };
 
-  // ⚡ SIMPAN DRAFT (Tanpa Pop-up Alert, Langsung Pindah & Menandai File)
+  // ⚡ SIMPAN DRAFT -> NAVIGASI DENGAN QUERY PARAM HIGHLIGHT_ID
   const handleSaveDraft = (e) => {
     e.preventDefault();
     setLoadingDraft(true);
@@ -367,73 +382,76 @@ function DraftSuratTugas() {
     })
     .then((res) => {
       setLoadingDraft(false);
-      
-      // Ambil ID draft yang baru disimpan/diperbarui
       const savedId = res?.data?.data?.id || res?.data?.id || draftIdParam;
       
-      // 🚀 Langsung pindah ke halaman /draft-dokumen tanpa alert
       if (savedId) {
-        navigate(`/draft-dokumen?highlight=${savedId}`, {
-          state: { highlightId: savedId, autoFocus: true }
-        });
+        navigate(`/draft-dokumen?highlight_id=${savedId}`);
       } else {
         navigate('/draft-dokumen');
       }
     })
     .catch(err => {
-      console.error(err);
+      console.error("Gagal memproses simpan draf:", err);
       setLoadingDraft(false);
     });
   };
 
-  // ⚡ KIRIM KE ANTREAN / SIAP CETAK (Tanpa Pop-up Alert, Langsung Pindah & Menandai File)
-  const handleSelesai = (e) => {
+  // ⚡ KIRIM KE ANTREAN / SIAP CETAK -> DENGAN AWAIT & HIGHLIGHT MATCHING
+  const handleSelesai = async (e) => {
     e.preventDefault();
     setLoadingSelesai(true);
     const token = localStorage.getItem('token');
     
-    const payloadMultipart = generateMultipartData();
-    payloadMultipart.append('items', JSON.stringify(dokumen_item));
+    try {
+      const payloadMultipart = generateMultipartData();
+      payloadMultipart.append('items', JSON.stringify(dokumen_item));
 
-    let createdDocId = null;
+      const namaDokumenFinal = namaDraft.toLowerCase().includes('tugas') 
+        ? namaDraft 
+        : `Surat Tugas - ${namaDraft}`;
 
-    axios.post('http://localhost:8000/api/siap-cetak', payloadMultipart, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data',
-        'Accept': 'application/json'
-      }
-    })
-    .then((res) => {
-      createdDocId = res?.data?.data?.id || res?.data?.id;
+      payloadMultipart.set('nama_dokumen', namaDokumenFinal);
+      payloadMultipart.append('nama_arsip_display', namaDokumenFinal);
+
+      const resCetak = await axios.post('http://localhost:8000/api/siap-cetak', payloadMultipart, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+          'Accept': 'application/json'
+        }
+      });
+
+      const newCreatedId = resCetak?.data?.data?.id || resCetak?.data?.id;
 
       if (draftIdParam) {
-        return axios.delete(`http://localhost:8000/api/drafts/${draftIdParam}`, {
+        await axios.delete(`http://localhost:8000/api/drafts/${draftIdParam}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
       }
-    })
-    .then(() => {
+
       setLoadingSelesai(false);
-      
-      // 🚀 Langsung pindah ke halaman /siap-cetak tanpa alert
-      if (createdDocId) {
-        navigate(`/siap-cetak?highlight=${createdDocId}`, {
-          state: { highlightId: createdDocId, autoFocus: true }
-        });
-      } else {
-        navigate('/siap-cetak');
-      }
-    })
-    .catch(err => {
-      console.error(err);
+
+      navigate('/siap-cetak', {
+        state: { 
+          targetTab: 'surat_tugas', 
+          highlightId: newCreatedId
+        }
+      });
+    } catch (err) {
+      console.error("Gagal memproses data ke antrean siap cetak:", err);
       setLoadingSelesai(false);
-    });
+    }
   };
 
   const formatLabel = (text) => {
     return text.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
+
+  const isPembuatDraft = (draftIdParam && creatorId && currentLoginId) 
+    ? String(currentLoginId) === String(creatorId) 
+    : true;
+
+  const isRestrictedPenanggung = !isPembuatDraft;
 
   // =========================================================================
   // RENDER LIVE PREVIEW (Tampilan Sky Blue Bersih & Natural)
@@ -656,23 +674,34 @@ function DraftSuratTugas() {
                       })}
                   </div>
 
-                  <div className="pt-6 border-t border-sky-100 flex flex-wrap justify-end gap-3">
-                    <button 
-                      type="button" 
-                      onClick={handleSaveDraft} 
-                      disabled={loadingDraft || loadingSelesai} 
-                      className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
-                    >
-                      {loadingDraft ? 'Menyimpan...' : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'}
-                    </button>
-                    
-                    <button 
-                      type="submit" 
-                      disabled={loadingDraft || loadingSelesai} 
-                      className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
-                    >
-                      {loadingSelesai ? 'Memproses...' : '& Kirim Ke Antrean'}
-                    </button>
+                  {/* TOMBOL AKSI METODE TERENKRIPSI HAK AKSES */}
+                  <div className="pt-6 border-t border-sky-100 flex flex-col items-end gap-3">
+                    {isRestrictedPenanggung && (
+                      <span className="text-[10px] text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-bold shadow-xs">
+                        ⚠️ Akses Terbatas: Anda bukan pembuat asli dokumen ini, Anda hanya diizinkan memperbarui Draft.
+                      </span>
+                    )}
+
+                    <div className="flex flex-wrap justify-end gap-3">
+                      <button 
+                        type="button" 
+                        onClick={handleSaveDraft} 
+                        disabled={loadingDraft || loadingSelesai} 
+                        className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
+                      >
+                        {loadingDraft ? 'Menyimpan...' : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'}
+                      </button>
+                      
+                      {!isRestrictedPenanggung && (
+                        <button 
+                          type="submit" 
+                          disabled={loadingDraft || loadingSelesai} 
+                          className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
+                        >
+                          {loadingSelesai ? 'Memproses...' : 'Selesai & Kirim Ke Antrean'}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                 </form>

@@ -125,7 +125,7 @@ function AdminDashboard() {
     fetchDashboardData();
   }, []);
 
-  const statIcons = ['📁', '✨', '📄'];
+  const statIcons = ['📁', '📚', '📄'];
 
   return (
     <div 

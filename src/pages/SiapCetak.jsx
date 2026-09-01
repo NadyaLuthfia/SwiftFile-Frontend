@@ -1,21 +1,119 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import axios from 'axios';
 
-// Konfigurasi dasar API
 const API_BASE_URL = 'http://localhost:8000/api';
 
+// HELPER PINTAR REKURSIF: Menggeledah isi objek untuk melacak field variabel
+const dapatkanValueSakti = (inputObj, targetKey) => {
+  if (!inputObj) return null;
+  let obj = inputObj;
+  if (typeof obj === 'string') {
+    try { obj = JSON.parse(obj); } catch (e) { return null; }
+  }
+  if (typeof obj !== 'object' || obj === null) return null;
+
+  const targetLower = targetKey.toLowerCase();
+  for (const key of Object.keys(obj)) {
+    if (key.toLowerCase() === targetLower) {
+      const val = obj[key];
+      if (val !== null && val !== undefined && val !== '') return val;
+    }
+  }
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (val && (typeof val === 'object' || (typeof val === 'string' && val.trim().startsWith('{')))) {
+      const hasilDalam = dapatkanValueSakti(val, targetKey);
+      if (hasilDalam) return hasilDalam;
+    }
+  }
+  return null;
+};
+
+// Helper kecil cek pengadaan barang
+const meGat = (item) => Boolean(dapatkanValueSakti(item, 'PENGADAAN'));
+
+// HELPER TEKS: Menggabungkan seluruh teks dokumen untuk pencocokan kategori
+const dapatkanTeksDokumen = (item) => {
+  if (!item) return '';
+  const namaDoc = item.nama_dokumen || '';
+  const namaArsip = item.nama_arsip_display || '';
+  const jenisDoc = item.jenis_dokumen || item.kategori || item.tipe || item.nama_draft || '';
+  const inputData = typeof item.input_data === 'object' ? JSON.stringify(item.input_data) : (item.input_data || '');
+  const stringified = typeof item === 'object' ? JSON.stringify(item) : '';
+  return `${namaDoc} ${namaArsip} ${jenisDoc} ${inputData} ${stringified}`.toLowerCase();
+};
+
+// HELPER PINTAR KATEGORI: Konsisten dengan ArsipHistory
+const dapatkanKategoriDokumen = (item) => {
+  if (!item) return 'ba_penyerahan';
+
+  const katEksplisit = (item.kategori || item.jenis_dokumen || item.tipe_dokumen || item.tipe || '').toLowerCase();
+  if (katEksplisit.includes('tor_jasa') || katEksplisit === 'jasa') return 'tor_jasa';
+  if (katEksplisit.includes('tor_barang') || katEksplisit === 'barang') return 'tor_barang';
+
+  const teks = dapatkanTeksDokumen(item);
+
+  if (teks.includes('penyerahan')) return 'ba_penyerahan';
+  if (teks.includes('kerusakan')) return 'ba_kerusakan';
+  if (teks.includes('tugas')) return 'surat_tugas';
+
+  const adaIndikasiJasa = 
+    teks.includes('jasa') || 
+    teks.includes('pekerjaan') || 
+    teks.includes('pemeliharaan') || 
+    teks.includes('perbaikan') || 
+    teks.includes('servis') || 
+    teks.includes('service') || 
+    teks.includes('kegiatan') ||
+    teks.includes('sewa') ||
+    Boolean(dapatkanValueSakti(item, 'NAMA_PEKERJAAN')) ||
+    Boolean(dapatkanValueSakti(item, 'PEKERJAAN')) ||
+    Boolean(dapatkanValueSakti(item, 'NAMA_JASA')) ||
+    Boolean(dapatkanValueSakti(item, 'JASA')) ||
+    Boolean(dapatkanValueSakti(item, 'KEGIATAN')) ||
+    Boolean(dapatkanValueSakti(item, 'NAMA_KEGIATAN'));
+
+  if ((teks.includes('tor') || teks.includes('term of reference') || teks.includes('kak')) && adaIndikasiJasa) {
+    return 'tor_jasa';
+  }
+
+  if (teks.includes('tor') || teks.includes('term of reference') || teks.includes('kak') || meGat(item) || teks.includes('barang')) {
+    return 'tor_barang';
+  }
+
+  if (adaIndikasiJasa) return 'tor_jasa';
+
+  return 'ba_penyerahan';
+};
+
+const formatTanggalIndo = (dateStr) => {
+  if (!dateStr) return '-';
+  const safeDateString = String(dateStr).replace(' ', 'T');
+  const d = new Date(safeDateString);
+  if (isNaN(d.getTime())) return dateStr; 
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
 function SiapCetak() {
-  // 1. STATE UTAMA & NAVIGASI 5 TAB
-  const [activeTab, setActiveTab] = useState('ba_penyerahan'); 
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Inisialisasi tab awal dari state navigasi / query params fleksibel
+  const [activeTab, setActiveTab] = useState(() => {
+    return searchParams.get('tab') || location.state?.targetTab || location.state?.activeTab || location.state?.tab || 'ba_penyerahan';
+  }); 
+
   const [antreanList, setAntreanList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // State indikator loading khusus saat proses cetak/PDF berjalan per-baris
   const [printingId, setPrintingId] = useState(null);
+  const [highlightTarget, setHighlightTarget] = useState(null);
+  const highlightedRef = useRef(null);
 
-  // Helper untuk mengambil token autentikasi
   const getAuthConfig = useCallback(() => {
     const token = localStorage.getItem('token');
     return {
@@ -26,7 +124,43 @@ function SiapCetak() {
     };
   }, []);
 
-  // 2. AMBIL DATA DARI DATABASE
+  // DETEKSI PENANDA / HIGHLIGHT SECARA MAKSIMAL & FLEKSIBEL
+  useEffect(() => {
+    const targetTabInput = searchParams.get('tab') || location.state?.targetTab || location.state?.activeTab || location.state?.tab;
+    if (targetTabInput) {
+      setActiveTab(targetTabInput);
+    }
+
+    // Ekstrak target highlight dari semua kemungkinan nama property
+    const rawTarget = 
+      searchParams.get('highlight') || 
+      searchParams.get('id') || 
+      searchParams.get('highlightId') ||
+      location.state?.highlightId || 
+      location.state?.highlight_id || 
+      location.state?.highlight || 
+      location.state?.id || 
+      location.state?.documentId || 
+      location.state?.document_id ||
+      location.state?.nomorDokumen ||
+      location.state?.namaDokumen ||
+      location.state?.nama_dokumen;
+
+    if (rawTarget) {
+      const cleanTarget = typeof rawTarget === 'object' 
+        ? (rawTarget.id || rawTarget.nama_dokumen || JSON.stringify(rawTarget)) 
+        : String(rawTarget);
+        
+      setHighlightTarget(cleanTarget);
+
+      // Pertahankan efek highlight selama 15 detik (jika tidak diklik print)
+      const timer = setTimeout(() => {
+        setHighlightTarget(null);
+      }, 15000); 
+      return () => clearTimeout(timer);
+    }
+  }, [location.state, searchParams]);
+
   const ambilAntreanCetak = useCallback(() => {
     setLoading(true);
     axios.get(`${API_BASE_URL}/siap-cetak`, getAuthConfig())
@@ -46,21 +180,56 @@ function SiapCetak() {
     ambilAntreanCetak();
   }, [ambilAntreanCetak]);
 
-  // 3. AKSI: PRINT & UPDATE STATUS (Sekaligus Update Tanggal Cetak)
-  const handlePrintAction = (id, namaDokumen) => {
-    // Kunci tombol cetak untuk baris dokumen ini
-    setPrintingId(id);
+  // FUNGSI PENCOCOKAN SAKTI: Cek apakah item ini yang di-highlight (ID/Nama Dokumen)
+  const isItemHighlighted = useCallback((file) => {
+    if (!highlightTarget) return false;
+    
+    const targetStr = String(highlightTarget).toLowerCase().trim();
+    if (!targetStr) return false;
 
-    axios.put(`${API_BASE_URL}/siap-cetak/${id}/status`, {
-      copies: 1,
-      pages: 'All'
-    }, getAuthConfig())
+    const fileId = String(file.id || '').toLowerCase().trim();
+    const namaDoc = String(file.nama_dokumen || '').toLowerCase().trim();
+    const namaArsip = String(file.nama_arsip_display || '').toLowerCase().trim();
+
+    return fileId === targetStr || 
+           namaDoc === targetStr || 
+           namaArsip === targetStr ||
+           (targetStr.length > 2 && (namaDoc.includes(targetStr) || namaArsip.includes(targetStr) || targetStr.includes(namaDoc)));
+  }, [highlightTarget]);
+
+  // CARI ITEM HIGHLIGHT DARI LIST & OTOMATIS PINDAHKAN TAB JIKA DITEMUKAN
+  const targetHighlightItem = useMemo(() => {
+    if (!highlightTarget || antreanList.length === 0) return null;
+    return antreanList.find(f => isItemHighlighted(f)) || null;
+  }, [highlightTarget, antreanList, isItemHighlighted]);
+
+  useEffect(() => {
+    if (targetHighlightItem) {
+      const katDokumen = dapatkanKategoriDokumen(targetHighlightItem);
+      setActiveTab(katDokumen);
+    }
+  }, [targetHighlightItem]);
+
+  // AUTO SCROLL KE BERKAS HIGHLIGHT
+  useEffect(() => {
+    if (targetHighlightItem && highlightedRef.current && !loading) {
+      const timer = setTimeout(() => {
+        highlightedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [targetHighlightItem, loading, activeTab]);
+
+  const handlePrintAction = (id, namaDokumen) => {
+    setPrintingId(id);
+    // MATIKAN PENANDA BERKAS SECARA INSTAN KETIKA TOMBOL PRINT DIKLIK
+    setHighlightTarget(null);
+
+    axios.put(`${API_BASE_URL}/siap-cetak/${id}/status`, { copies: 1, pages: 'All' }, getAuthConfig())
       .then((res) => {
         const pdfUrl = res.data.pdf_url;
-
         if (pdfUrl) {
           const printWindow = window.open(pdfUrl, '_blank');
-          
           if (printWindow) {
             printWindow.onload = () => {
               printWindow.focus();
@@ -68,112 +237,71 @@ function SiapCetak() {
             };
           }
         }
-
-        // Refresh antrean agar tanggal_cetak terbaru langsung muncul di tabel UI
         ambilAntreanCetak(); 
       })
-      .catch(err => {
-        console.error("Gagal memperbarui status cetak:", err);
-      })
-      .finally(() => {
-        // Lepas kembali status loading tombol setelah selesai/gagal
-        setPrintingId(null);
-      });
+      .catch(err => console.error(err))
+      .finally(() => setPrintingId(null));
   };
 
-  // 4. AKSI FINAL: UNTUK SEMUA JENIS DOKUMEN (UBAH STATUS JADI SELESAI/ARSIP)
-  const handleSelesaiTanpaTtd = (id) => {
+  const handleSelesaiTanpaTtd = (id, namaDokumen) => {
     axios.post(`${API_BASE_URL}/siap-cetak/${id}/selesai`, {}, getAuthConfig())
       .then(() => {
-        ambilAntreanCetak(); 
+        navigate('/arsip-history', {
+          state: { 
+            highlightId: id, 
+            nomorDokumen: namaDokumen,
+            targetTab: activeTab,
+            activeTab: activeTab
+          }
+        });
       })
-      .catch(err => {
-        console.error("Detail Error Selesai Dokumen:", err.response ? err.response.data : err);
-      });
+      .catch(err => alert("Gagal menyelesaikan dokumen."));
   };
 
-  // HELPER PINTAR REKURSIF: Menggeledah isi objek untuk melacak field variabel form
-  const dapatkanValueSakti = (inputObj, targetKey) => {
-    if (!inputObj) return null;
-
-    let obj = inputObj;
-    if (typeof obj === 'string') {
-      try { obj = JSON.parse(obj); } catch (e) { return null; }
-    }
-
-    if (typeof obj !== 'object' || obj === null) return null;
-
-    const targetLower = targetKey.toLowerCase();
-
-    for (const key of Object.keys(obj)) {
-      if (key.toLowerCase() === targetLower) {
-        const val = obj[key];
-        if (val !== null && val !== undefined && val !== '') return val;
+  // HITUNG ANTREAN MENGGUNAKAN HELPER SAKTI
+  const tabCounts = useMemo(() => {
+    const counts = { ba_penyerahan: 0, ba_kerusakan: 0, surat_tugas: 0, tor_barang: 0, tor_jasa: 0 };
+    antreanList.forEach(item => {
+      if (item.foto_ttd) return;
+      const kat = dapatkanKategoriDokumen(item);
+      if (counts[kat] !== undefined) {
+        counts[kat]++;
       }
-    }
+    });
+    return counts;
+  }, [antreanList]);
 
-    for (const key of Object.keys(obj)) {
-      const val = obj[key];
-      if (val && (typeof val === 'object' || (typeof val === 'string' && val.trim().startsWith('{')))) {
-        const hasilDalam = dapatkanValueSakti(val, targetKey);
-        if (hasilDalam) return hasilDalam;
-      }
-    }
-
-    return null;
-  };
-
-  // DYNAMIC FILTERING
+  // DAFTAR TERFILTER DENGAN HELPER KATEGORI REKURSIF
   const daftarFileTerfilter = useMemo(() => {
     const lowerSearch = searchTerm.toLowerCase();
-    
     return antreanList.filter(item => {
       if (item.foto_ttd) return false;
 
       const namaDokumen = (item.nama_dokumen || '').toLowerCase();
       const namaArsipDisplay = (item.nama_arsip_display || '').toLowerCase();
-      
       const cocokPencarian = namaDokumen.includes(lowerSearch) || namaArsipDisplay.includes(lowerSearch);
       if (!cocokPencarian) return false;
 
-      const gabunganTeks = `${namaDokumen} ${namaArsipDisplay}`;
-      
-      if (activeTab === 'ba_penyerahan' && !gabunganTeks.includes('penyerahan')) return false;
-      if (activeTab === 'ba_kerusakan' && !gabunganTeks.includes('kerusakan')) return false;
-      if (activeTab === 'surat_tugas' && !gabunganTeks.includes('tugas')) return false;
-      
-      // Filter khusus TOR Barang & TOR Jasa
-      if (activeTab === 'tor_barang' && !(gabunganTeks.includes('tor') && gabunganTeks.includes('barang'))) return false;
-      if (activeTab === 'tor_jasa' && !(gabunganTeks.includes('tor') && gabunganTeks.includes('jasa'))) return false;
-
-      return true;
+      return dapatkanKategoriDokumen(item) === activeTab;
     });
   }, [antreanList, searchTerm, activeTab]);
-
-  const formatTanggalIndo = (dateStr) => {
-    if (!dateStr) return '-';
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr; 
-    return d.toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-  };
 
   return (
     <div id="siap-cetak-wrapper" className="bg-[#F4F8FC] text-slate-700 flex h-screen w-full overflow-hidden antialiased">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap');
         
-        #siap-cetak-wrapper, 
-        #siap-cetak-wrapper *,
-        #siap-cetak-wrapper input,
-        #siap-cetak-wrapper button,
-        #siap-cetak-wrapper table,
-        #siap-cetak-wrapper th,
-        #siap-cetak-wrapper td {
+        #siap-cetak-wrapper, #siap-cetak-wrapper * {
           font-family: 'Poppins', sans-serif !important;
+        }
+
+        @keyframes animGoyang {
+          0%, 100% { transform: translateY(0px) scale(1); }
+          50% { transform: translateY(-7px) scale(1.01); }
+        }
+        
+        .efek-goyang {
+          animation: animGoyang 1.6s ease-in-out infinite !important;
         }
       `}</style>
 
@@ -182,7 +310,6 @@ function SiapCetak() {
       <main className="flex-1 flex flex-col px-8 py-8 overflow-y-auto h-full custom-scrollbar">
         <div className="w-full max-w-6xl mx-auto space-y-6">
           
-          {/* HEADER SEKSI + SEARCH BAR DI SAMPING KANAN */}
           <section className="flex items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-black text-slate-800 tracking-tight">
@@ -190,7 +317,6 @@ function SiapCetak() {
               </h1>
             </div>
 
-            {/* INPUT PENCARIAN (Sejajar Judul) */}
             <div className="relative w-72">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-sky-400 text-xs">🔍</span>
               <input 
@@ -203,33 +329,47 @@ function SiapCetak() {
             </div>
           </section>
 
-          {/* FILTER BAR TAB KATEGORI (Grid 5 Kolom - Modern & Rapih) */}
+          {/* BADGE TAB */}
           <section className="bg-white p-2.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50">
             <div className="grid grid-cols-5 gap-2 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60 w-full">
               {[
-                { id: 'ba_penyerahan', label: '🤝 BA Penyerahan' },
-                { id: 'ba_kerusakan', label: '⚠️ BA Kerusakan' },
-                { id: 'surat_tugas', label: '💼 Surat Tugas' },
-                { id: 'tor_barang', label: '📦 TOR Barang' },
-                { id: 'tor_jasa', label: '🛠️ TOR Jasa' }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`py-2.5 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer text-center truncate active:scale-95 ${
-                    activeTab === tab.id 
-                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.02]' 
-                      : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+                { id: 'ba_penyerahan', label: 'BA Penyerahan', icon: '🤝', pingColor: 'bg-sky-400', badgeColor: 'bg-sky-500 text-white' },
+                { id: 'ba_kerusakan', label: 'BA Kerusakan', icon: '⚠️', pingColor: 'bg-sky-400', badgeColor: 'bg-sky-500 text-white' },
+                { id: 'surat_tugas', label: 'Surat Tugas', icon: '💼', pingColor: 'bg-blue-400', badgeColor: 'bg-blue-600 text-white' },
+                { id: 'tor_barang', label: 'TOR Barang', icon: '📦', pingColor: 'bg-sky-400', badgeColor: 'bg-sky-600 text-white' },
+                { id: 'tor_jasa', label: 'TOR Jasa', icon: '🛠️', pingColor: 'bg-blue-500', badgeColor: 'bg-blue-700 text-white' }
+              ].map((tab) => {
+                const count = tabCounts[tab.id] || 0;
+                const isActive = activeTab === tab.id;
+
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`py-2.5 px-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 relative active:scale-95 ${
+                      isActive 
+                        ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.02]' 
+                        : 'text-slate-500 hover:text-sky-600 hover:bg-sky-50/60'
+                    }`}
+                  >
+                    <span className="truncate">{tab.icon} {tab.label}</span>
+
+                    {count > 0 && (
+                      <span className="relative flex h-4 w-4 items-center justify-center flex-shrink-0">
+                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${tab.pingColor} opacity-75`}></span>
+                        <span className={`relative inline-flex rounded-full h-4 w-4 ${isActive ? 'bg-white text-blue-600' : tab.badgeColor} text-[10px] font-black items-center justify-center shadow-xs`}>
+                          {count}
+                        </span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </section>
 
-          {/* MAIN DISPLAY DATA BOARD */}
+          {/* LIST DOKUMEN */}
           {loading ? (
             <div className="bg-white rounded-3xl border border-sky-100/80 p-16 text-center space-y-4 shadow-xs animate-pulse">
               <div className="text-4xl text-sky-500 animate-spin inline-block">⏳</div>
@@ -237,152 +377,136 @@ function SiapCetak() {
             </div>
           ) : daftarFileTerfilter.length === 0 ? (
             <div className="bg-white rounded-3xl border border-sky-100/80 p-16 text-center space-y-3 shadow-xs">
-              <div className="text-4xl">✨</div>
+              <div className="text-4xl">📦</div>
               <p className="text-slate-500 font-bold text-sm">Tab dokumen ini sedang kosong!</p>
               <p className="text-xs text-slate-400">Tidak ada data antrean aktif yang terdeteksi untuk kategori ini.</p>
             </div>
           ) : (
-            <div className="bg-white rounded-3xl border border-sky-100/80 shadow-xs overflow-hidden">
-              <div className="w-full">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gradient-to-r from-sky-50/70 to-blue-50/50 border-b border-sky-100 text-[10px] font-extrabold text-sky-800 uppercase tracking-wider">
-                      <th className="py-3.5 px-4 w-[65%]">Detail Nama Berkas</th>
-                      <th className="py-3.5 px-4 text-center w-[35%]">Aksi Cetak & Finalisasi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-sky-50 text-xs font-semibold text-slate-600">
-                    {daftarFileTerfilter.map((file) => {
-                      const namaTampilan = file.nama_arsip_display || file.nama_dokumen;
-                      
-                      // 🔍 Cek apakah dokumen ini sudah pernah di-print
-                      const isPrinted = Boolean(file.tanggal_cetak);
+            <div className="space-y-3">
+              <div className="px-6 py-1 flex items-center justify-between text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
+                <span>Detail Nama Berkas</span>
+                <span>Aksi Cetak & Finalisasi</span>
+              </div>
 
-                      // Mengambil variabel khusus dari form / data_input
-                      const namaItem = dapatkanValueSakti(file, 'ITEM') || dapatkanValueSakti(file, 'NO_ITEM');
-                      const namaAlat = dapatkanValueSakti(file, 'NAMA_ALAT') || dapatkanValueSakti(file, 'NAMA_BARANG') || dapatkanValueSakti(file, 'ITEM');
-                      
-                      // Dapatkan Nama Jasa / Kegiatan dengan prioritas Nama Jasa
-                      const namaJasaOrKegiatan = 
-                        dapatkanValueSakti(file, 'NAMA_JASA') || 
-                        dapatkanValueSakti(file, 'JASA') || 
-                        dapatkanValueSakti(file, 'KEGIATAN') || 
-                        dapatkanValueSakti(file, 'NAMA_KEGIATAN') || 
-                        dapatkanValueSakti(file, 'PEKERJAAN') || 
-                        dapatkanValueSakti(file, 'PENGADAAN');
+              <div className="space-y-2">
+                {daftarFileTerfilter.map((file) => {
+                  const namaTampilan = file.nama_arsip_display || file.nama_dokumen;
+                  const isPrinted = Boolean(file.tanggal_cetak);
+                  
+                  // CEK HIGHLIGHT DENGAN FUNGSIONALITAS BARU
+                  const isNew = isItemHighlighted(file);
 
-                      // Ambil khusus tanggal berangkat dari variabel form
-                      const tglBerangkatInput = 
-                        dapatkanValueSakti(file, 'TANGGAL_BERANGKAT') || 
-                        dapatkanValueSakti(file, 'TGL_BERANGKAT') || 
-                        dapatkanValueSakti(file, 'TANGGAL') || 
-                        file.tgl_berangkat || 
-                        file.tanggal_berangkat;
+                  const namaItem = dapatkanValueSakti(file, 'ITEM') || dapatkanValueSakti(file, 'NO_ITEM');
+                  const namaAlat = dapatkanValueSakti(file, 'NAMA_ALAT') || dapatkanValueSakti(file, 'NAMA_BARANG') || dapatkanValueSakti(file, 'ITEM');
+                  const namaJasaOrKegiatan = dapatkanValueSakti(file, 'NAMA_JASA') || dapatkanValueSakti(file, 'JASA') || dapatkanValueSakti(file, 'KEGIATAN') || dapatkanValueSakti(file, 'NAMA_KEGIATAN') || dapatkanValueSakti(file, 'PEKERJAAN') || dapatkanValueSakti(file, 'PENGADAAN');
+                  const tglBerangkatInput = dapatkanValueSakti(file, 'TANGGAL_BERANGKAT') || dapatkanValueSakti(file, 'TGL_BERANGKAT') || dapatkanValueSakti(file, 'TANGGAL') || file.tgl_berangkat || file.tanggal_berangkat;
 
-                      return (
-                        <tr 
-                          key={file.id} 
-                          className="hover:bg-sky-50/50 transition-all duration-300 transform hover:scale-[1.01] hover:shadow-md hover:z-10 relative cursor-pointer group"
+                  return (
+                    <div 
+                      key={file.id}
+                      ref={isNew ? highlightedRef : null}
+                      id={`doc-row-${file.id}`}
+                      className={`rounded-2xl px-4 py-3 flex items-center justify-between transition-all duration-500 cursor-pointer ${
+                        isNew 
+                          ? 'efek-goyang border-2 border-sky-500 bg-gradient-to-r from-sky-50 via-blue-50 to-sky-50 shadow-lg shadow-sky-200/80 ring-4 ring-sky-200/60' 
+                          : 'bg-white border border-sky-100/80 hover:border-sky-300 hover:scale-[1.015] hover:shadow-md'
+                      }`}
+                    >
+                      {/* DETAIL FILE */}
+                      <div className="flex items-center gap-3.5">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0 transition-all ${
+                          isNew 
+                            ? 'bg-gradient-to-br from-sky-400 to-blue-600 text-white shadow-md border border-sky-300' 
+                            : 'bg-sky-50 border border-sky-100'
+                        }`}>
+                          {isNew ? '📄' : '📄'}
+                        </div>
+                        
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-slate-800 truncate max-w-[440px]" title={namaTampilan}>
+                              {namaTampilan}
+                            </p>
+
+                            {isNew && (
+                              <span className="bg-gradient-to-r from-sky-500 to-blue-600 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-md animate-pulse">
+                                BARU
+                              </span>
+                            )}
+                          </div>
+
+                          {activeTab === 'surat_tugas' && (
+                            <p className="text-[10px] text-sky-600 font-semibold flex items-center gap-1">
+                              📅 Berangkat: {formatTanggalIndo(tglBerangkatInput || file.created_at)}
+                            </p>
+                          )}
+
+                          {activeTab === 'ba_penyerahan' && (
+                            <p className="text-[10px] text-sky-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
+                              <span>📦 Item: {namaItem || <span className="italic text-slate-400">[Tidak ada nama item]</span>}</span>
+                            </p>
+                          )}
+
+                          {activeTab === 'ba_kerusakan' && (
+                            <p className="text-[10px] text-sky-700 font-semibold flex items-center gap-2 truncate max-w-[480px]">
+                              <span>⚠️ Alat: {namaAlat || <span className="italic text-slate-400">[Tidak ada nama alat]</span>}</span>
+                            </p>
+                          )}
+
+                          {activeTab === 'tor_barang' && (
+                            <p className="text-[10px] text-sky-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
+                              <span>📦 Barang: {namaItem || namaAlat || <span className="italic text-slate-400">[Tidak ada nama barang]</span>}</span>
+                            </p>
+                          )}
+
+                          {activeTab === 'tor_jasa' && (
+                            <p className="text-[10px] text-blue-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
+                              <span>🛠️ Kegiatan/Jasa: {namaJasaOrKegiatan || <span className="italic text-slate-400">[Tidak ada detail nama jasa]</span>}</span>
+                            </p>
+                          )}
+
+                          {file.tanggal_cetak && (
+                            <p className="text-[9px] text-emerald-600 font-bold flex items-center gap-1">
+                              🖨️ Tanggal Cetak Terakhir: {formatTanggalIndo(file.tanggal_cetak)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ACTION PIPELINE */}
+                      <div className="flex items-center justify-center gap-2.5">
+                        <button 
+                          type="button"
+                          disabled={printingId === file.id}
+                          onClick={() => handlePrintAction(file.id, namaTampilan)} 
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                            printingId === file.id 
+                              ? 'bg-slate-400 text-white cursor-not-allowed animate-pulse' 
+                              : 'bg-slate-800 text-white hover:bg-slate-900'
+                          }`}
                         >
-                          
-                          {/* DETAIL FILE */}
-                          <td className="py-3.5 px-4">
-                            <div className="flex items-center gap-3">
-                              <span className="text-2xl select-none flex-shrink-0 transition-transform duration-300 group-hover:scale-110">📄</span>
-                              <div className="min-w-0 space-y-0.5">
-                                <p className="text-slate-900 font-bold truncate max-w-[480px]" title={namaTampilan}>
-                                  {namaTampilan}
-                                </p>
-                                
-                                {/* 1. SURAT TUGAS */}
-                                {activeTab === 'surat_tugas' && (
-                                  <p className="text-[10px] text-sky-600 font-semibold flex items-center gap-1">
-                                    📅 Berangkat: {formatTanggalIndo(tglBerangkatInput || file.created_at)}
-                                  </p>
-                                )}
+                          {printingId === file.id ? '⏳ MEMPROSES PDF...' : '🖨️ PRINT FISIK'}
+                        </button>
 
-                                {/* 2. BA PENYERAHAN */}
-                                {activeTab === 'ba_penyerahan' && (
-                                  <p className="text-[10px] text-sky-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
-                                    <span>📦 Item: {namaItem || <span className="italic text-slate-400">[Tidak ada nama item]</span>}</span>
-                                  </p>
-                                )}
+                        <span className="text-sky-200 text-sm font-light select-none">|</span>
 
-                                {/* 3. BA KERUSAKAN */}
-                                {activeTab === 'ba_kerusakan' && (
-                                  <p className="text-[10px] text-amber-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
-                                    <span>⚠️ Alat: {namaAlat || <span className="italic text-slate-400">[Tidak ada nama alat]</span>}</span>
-                                  </p>
-                                )}
-
-                                {/* 4. TOR BARANG */}
-                                {activeTab === 'tor_barang' && (
-                                  <p className="text-[10px] text-sky-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
-                                    <span>📦 Barang: {namaItem || namaAlat || <span className="italic text-slate-400">[Tidak ada nama barang]</span>}</span>
-                                  </p>
-                                )}
-
-                                {/* 5. TOR JASA */}
-                                {activeTab === 'tor_jasa' && (
-                                  <p className="text-[10px] text-indigo-600 font-semibold flex items-center gap-2 truncate max-w-[480px]">
-                                    <span>🛠️ Kegiatan/Jasa: {namaJasaOrKegiatan || <span className="italic text-slate-400">[Tidak ada detail nama jasa]</span>}</span>
-                                  </p>
-                                )}
-
-                                {/* 🖨️ INDIKATOR TANGGAL CETAK TERAKHIR */}
-                                {file.tanggal_cetak && (
-                                  <p className="text-[9px] text-emerald-600 font-bold flex items-center gap-1">
-                                    🖨️ Tanggal Cetak Terakhir: {formatTanggalIndo(file.tanggal_cetak)}
-                                  </p>
-                                )}
-
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* ACTION PIPELINE */}
-                          <td className="py-3.5 px-4">
-                            <div className="flex items-center justify-center gap-3">
-                              
-                              {/* TOMBOL PRINT FISIK DENGAN LOADING STATE */}
-                              <button 
-                                type="button"
-                                disabled={printingId === file.id}
-                                onClick={() => handlePrintAction(file.id, namaTampilan)} 
-                                className={`px-3.5 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap ${
-                                  printingId === file.id 
-                                    ? 'bg-slate-400 text-white cursor-not-allowed animate-pulse' 
-                                    : 'bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md cursor-pointer'
-                                }`}
-                              >
-                                {printingId === file.id ? '⏳ MEMPROSES PDF...' : '🖨️ PRINT FISIK'}
-                              </button>
-
-                              <span className="text-sky-200 text-sm font-light select-none">|</span>
-
-                              {/* 🌟 TOMBOL SELESAI DINAMIS (Hanya Hijau & Aktif jika Sudah Diprint) */}
-                              <button
-                                type="button"
-                                disabled={!isPrinted}
-                                onClick={() => handleSelesaiTanpaTtd(file.id)}
-                                title={!isPrinted ? "Cetak/Print dokumen fisik terlebih dahulu!" : "Selesaikan dokumen"}
-                                className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-xs whitespace-nowrap flex items-center gap-1 ${
-                                  isPrinted
-                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-md cursor-pointer'
-                                    : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-70 border border-slate-300'
-                                }`}
-                              >
-                                ✅ SELESAI
-                              </button>
-
-                            </div>
-                          </td>
-
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                        <button
+                          type="button"
+                          disabled={!isPrinted}
+                          onClick={() => handleSelesaiTanpaTtd(file.id, file.nama_dokumen)}
+                          title={!isPrinted ? "Cetak/Print dokumen fisik terlebih dahulu!" : "Selesaikan dokumen"}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all shadow-xs whitespace-nowrap flex items-center gap-1 ${
+                            isPrinted
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 cursor-pointer'
+                              : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-70 border border-slate-300'
+                          }`}
+                        >
+                          ✅ SELESAI
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
