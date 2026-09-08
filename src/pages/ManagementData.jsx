@@ -3,21 +3,20 @@ import Sidebar from './Sidebar';
 import axios from 'axios';
 
 function ManagementData() {
-  // 🔑 Ambil role user yang sedang login dari localStorage
   const userRole = localStorage.getItem('role') || 'user';
 
-  // 📦 State Master Data
+  // State Master Data
   const [jabatanList, setJabatanList] = useState([]);
   const [bidangList, setBidangList] = useState([]);
   const [karyawanList, setKaryawanList] = useState([]);
 
-  // 📑 State Navigasi Tab ('karyawan', 'jabatan', 'bidang')
+  // State Navigasi Tab
   const [activeTab, setActiveTab] = useState('karyawan');
 
-  // 🔍 State Fitur Pencarian Global
+  // State Pencarian Global
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 🔔 State Notification & Timer Ref
+  // State Notification & Timer Ref
   const [notification, setNotification] = useState({
     show: false,
     message: '',
@@ -25,7 +24,7 @@ function ManagementData() {
   });
   const toastTimerRef = useRef(null);
 
-  // 🛡️ State Modal Konfirmasi Custom
+  // State Modal Konfirmasi Custom
   const [modalConfirm, setModalConfirm] = useState({
     isOpen: false,
     title: '',
@@ -34,7 +33,7 @@ function ManagementData() {
     onConfirm: null
   });
 
-  // 📦 State Form Input
+  // State Form Input
   const [inputJabatan, setInputJabatan] = useState('');
   const [inputBidang, setInputBidang] = useState('');
   const [formKaryawan, setFormKaryawan] = useState({
@@ -50,7 +49,7 @@ function ManagementData() {
     role: 'user'      
   });
 
-  // ✏️ State Fitur Edit (Modal)
+  // State Fitur Edit Modal
   const [modalEdit, setModalEdit] = useState({
     isOpen: false,
     tipe: '', 
@@ -58,11 +57,15 @@ function ManagementData() {
     data: {} 
   });
 
-  // 👁️ State Fitur Rincian Karyawan (Modal Detail)
+  // State Fitur Rincian Karyawan Modal
   const [modalDetail, setModalDetail] = useState({
     isOpen: false,
     data: null
   });
+
+  // State Fitur Toggle Password (Mata)
+  const [showPasswordAdd, setShowPasswordAdd] = useState(false);
+  const [showPasswordEdit, setShowPasswordEdit] = useState(false);
 
   const parseErrorMessage = (err, defaultMsg) => {
     if (!err.response) return err.message || defaultMsg;
@@ -157,12 +160,12 @@ function ManagementData() {
         password: '',
         role: 'user'
       });
+      setShowPasswordAdd(false);
       muatSemuaData();
       showToast('Data karyawan berhasil ditambahkan!', 'success');
     }).catch(err => showToast(parseErrorMessage(err, "Gagal tambah data karyawan"), 'error'));
   };
 
-  // ✕ FUNGSI NONAKTIFKAN DATA (Bisa dilakukan Admin & Master Admin)
   const hapusData = (id, tipe) => {
     setModalConfirm({
       isOpen: true,
@@ -184,7 +187,6 @@ function ManagementData() {
     });
   };
 
-  // 🗑️ FUNGSI HAPUS PERMANEN (KHUSUS MASTER ADMIN)
   const hapusPermanenData = (id, tipe) => {
     setModalConfirm({
       isOpen: true,
@@ -206,7 +208,6 @@ function ManagementData() {
     });
   };
 
-  // ✅ FUNGSI PULIHKAN KARYAWAN (Bisa dilakukan Admin & Master Admin)
   const pulihkanKaryawan = (id) => {
     const karyawan = karyawanList.find(k => k.id === id);
     if (!karyawan) return;
@@ -254,10 +255,10 @@ function ManagementData() {
         no_hp: item.no_hp || '',
         email: item.email || '',
         user_id: item.user_id || item.user?.id || null, 
-        buat_akun: false,              
-        username: '',
+        buat_akun: !!item.user,
+        username: item.user?.username || '',
         password: '',
-        role: 'user'
+        role: item.user?.role || 'user'
       };
     }
 
@@ -267,6 +268,7 @@ function ManagementData() {
       id: item.id,
       data: payload
     });
+    setShowPasswordEdit(false);
   };
 
   const bukaModalDetail = (item) => {
@@ -519,7 +521,12 @@ function ManagementData() {
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-semibold text-sky-700">Password</label>
-                        <input type="password" value={formKaryawan.password} onChange={e => setFormKaryawan({...formKaryawan, password: e.target.value})} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-sky-500 bg-sky-50/30 text-slate-800 h-9 font-medium" placeholder="Minimal 6 karakter..." required={formKaryawan.buat_akun} />
+                        <div className="relative w-full">
+                          <input type={showPasswordAdd ? "text" : "password"} value={formKaryawan.password} onChange={e => setFormKaryawan({...formKaryawan, password: e.target.value})} className="w-full border border-slate-200 rounded-lg pl-3 pr-10 py-1.5 text-xs focus:outline-none focus:border-sky-500 bg-sky-50/30 text-slate-800 h-9 font-medium" placeholder="Minimal 6 karakter..." required={formKaryawan.buat_akun} />
+                          <button type="button" onClick={() => setShowPasswordAdd(!showPasswordAdd)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-sky-600 cursor-pointer text-sm">
+                            {showPasswordAdd ? '🙈' : '👁️'}
+                          </button>
+                        </div>
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-semibold text-sky-700">Hak Akses / Role</label>
@@ -604,7 +611,6 @@ function ManagementData() {
                               <button type="button" onClick={() => bukaModalDetail(k)} className="p-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-600 transition-all duration-150 cursor-pointer" title="Lihat Rincian">👁️</button>
                               <button type="button" onClick={() => bukaModalEdit(k, 'karyawan')} className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-all duration-150 cursor-pointer" title="Edit Data">✏️</button>
                               
-                              {/* ✕ / ✅ NONAKTIFKAN / AKTIFKAN (ADMIN & MASTER ADMIN) */}
                               {(userRole === 'admin' || userRole === 'master_admin') && (
                                 k.status_aktif === 1 || k.status_aktif === '1' ? (
                                   <button type="button" onClick={() => hapusData(k.id, 'karyawan')} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all duration-150 cursor-pointer" title="Nonaktifkan Karyawan">✕</button>
@@ -613,7 +619,6 @@ function ManagementData() {
                                 )
                               )}
 
-                              {/* 🗑️ HAPUS PERMANEN (KHUSUS MASTER ADMIN) */}
                               {userRole === 'master_admin' && (
                                 <button type="button" onClick={() => hapusPermanenData(k.id, 'karyawan')} className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-600 transition-all duration-150 cursor-pointer" title="Hapus Permanen">🗑️</button>
                               )}
@@ -763,7 +768,7 @@ function ManagementData() {
         </div>
       </main>
 
-      {/* 🛡️ MODAL KONFIRMASI CUSTOM */}
+      {/* MODAL KONFIRMASI CUSTOM */}
       {modalConfirm.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 transition-all duration-200">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm border border-sky-100 shadow-2xl space-y-4 text-center font-poppins animate-fade-in">
@@ -803,7 +808,7 @@ function ManagementData() {
         </div>
       )}
 
-      {/* 👁️ MODAL DETAIL KARYAWAN */}
+      {/* MODAL DETAIL KARYAWAN */}
       {modalDetail.isOpen && modalDetail.data && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-200">
           <div className="bg-white rounded-2xl p-5 md:p-6 w-full max-w-md border border-sky-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto font-poppins">
@@ -906,7 +911,7 @@ function ManagementData() {
         </div>
       )}
 
-      {/* ✏️ MODAL EDIT UNIVERSAL */}
+      {/* MODAL EDIT UNIVERSAL */}
       {modalEdit.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-200">
           <div className="bg-white rounded-2xl p-5 md:p-6 w-full max-w-lg border border-sky-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto font-poppins">
@@ -967,47 +972,54 @@ function ManagementData() {
                     <input type="text" value={modalEdit.data.alamat || ''} onChange={e => setModalEdit({...modalEdit, data: { ...modalEdit.data, alamat: e.target.value }})} className="border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500 w-full bg-white h-9.5 font-medium text-slate-800" />
                   </div>
 
-                  {modalEdit.data.user_id ? (
-                    <div className="bg-sky-50 text-sky-800 text-xs font-bold p-3 rounded-xl border border-sky-200 flex items-center gap-1.5 mt-1">
-                      🛡️ Karyawan ini sudah memiliki akun login terikat.
+                  <div className="border-t border-dashed border-slate-200 pt-3 mt-1">
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="checkbox" 
+                        id="edit_buat_akun" 
+                        checked={modalEdit.data.buat_akun || false} 
+                        onChange={e => setModalEdit({...modalEdit, data: {...modalEdit.data, buat_akun: e.target.checked}})} 
+                        className="w-4 h-4 text-sky-600 border-slate-300 rounded focus:ring-sky-500 cursor-pointer"
+                      />
+                      <label htmlFor="edit_buat_akun" className="text-xs font-bold text-slate-800 cursor-pointer select-none">
+                        🔑 {modalEdit.data.user_id ? 'Kelola / Update Akses Login' : 'Buatkan Akses Login Sekarang'}
+                      </label>
                     </div>
-                  ) : (
-                    <div className="border-t border-dashed border-slate-200 pt-3 mt-1">
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          id="edit_buat_akun" 
-                          checked={modalEdit.data.buat_akun || false} 
-                          onChange={e => setModalEdit({...modalEdit, data: {...modalEdit.data, buat_akun: e.target.checked}})} 
-                          className="w-4 h-4 text-sky-600 border-slate-300 rounded focus:ring-sky-500 cursor-pointer"
-                        />
-                        <label htmlFor="edit_buat_akun" className="text-xs font-bold text-slate-800 cursor-pointer select-none">
-                          🔑 Buatkan Akses Login Sekarang
-                        </label>
-                      </div>
-                      
-                      {modalEdit.data.buat_akun && (
-                        <div className="space-y-3 bg-sky-50/40 p-3.5 rounded-xl border border-sky-100 mt-2 transition-all duration-200">
-                          <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-semibold text-sky-700">Username Baru</label>
-                            <input type="text" value={modalEdit.data.username || ''} onChange={e => setModalEdit({...modalEdit, data: { ...modalEdit.data, username: e.target.value }})} className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-sky-500 bg-white w-full text-slate-800 h-9 font-medium" required={modalEdit.data.buat_akun} />
-                          </div>
-                          <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-semibold text-sky-700">Password</label>
-                            <input type="password" value={modalEdit.data.password || ''} onChange={e => setModalEdit({...modalEdit, data: { ...modalEdit.data, password: e.target.value }})} className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-sky-500 bg-white w-full text-slate-800 h-9 font-medium" placeholder="Minimal 6 karakter..." required={modalEdit.data.buat_akun} />
-                          </div>
-                          <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-semibold text-sky-700">Hak Akses / Role</label>
-                            <select value={modalEdit.data.role || 'user'} onChange={e => setModalEdit({...modalEdit, data: { ...modalEdit.data, role: e.target.value }})} className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-sky-500 bg-white w-full text-slate-800 font-bold h-9 cursor-pointer" required={modalEdit.data.buat_akun}>
-                              <option value="user">User / Staf Biasa</option>
-                              <option value="admin">Admin</option>
-                              <option value="master_admin">Master Admin</option>
-                            </select>
+                    
+                    {modalEdit.data.buat_akun && (
+                      <div className="space-y-3 bg-sky-50/40 p-3.5 rounded-xl border border-sky-100 mt-2 transition-all duration-200">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-semibold text-sky-700">Username</label>
+                          <input type="text" value={modalEdit.data.username || ''} onChange={e => setModalEdit({...modalEdit, data: { ...modalEdit.data, username: e.target.value }})} className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-sky-500 bg-white w-full text-slate-800 h-9 font-medium" required={modalEdit.data.buat_akun} />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-semibold text-sky-700">Password {modalEdit.data.user_id ? '(Kosongkan jika tidak diganti)' : ''}</label>
+                          <div className="relative w-full">
+                            <input type={showPasswordEdit ? "text" : "password"} value={modalEdit.data.password || ''} onChange={e => setModalEdit({...modalEdit, data: { ...modalEdit.data, password: e.target.value }})} className="border border-slate-200 rounded-lg pl-3 pr-10 py-1.5 text-xs focus:outline-none focus:border-sky-500 bg-white w-full text-slate-800 h-9 font-medium" placeholder="Minimal 6 karakter..." required={!modalEdit.data.user_id && modalEdit.data.buat_akun} />
+                            <button type="button" onClick={() => setShowPasswordEdit(!showPasswordEdit)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-sky-600 cursor-pointer text-sm">
+                              {showPasswordEdit ? (<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22" />
+                  </svg>
+                ) : (
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  )}
+                            </button>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  )}
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-semibold text-sky-700">Hak Akses / Role</label>
+                          <select value={modalEdit.data.role || 'user'} onChange={e => setModalEdit({...modalEdit, data: { ...modalEdit.data, role: e.target.value }})} className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-sky-500 bg-white w-full text-slate-800 font-bold h-9 cursor-pointer" required={modalEdit.data.buat_akun}>
+                            <option value="user">User / Staf Biasa</option>
+                            <option value="admin">Admin</option>
+                            <option value="master_admin">Master Admin</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
 
