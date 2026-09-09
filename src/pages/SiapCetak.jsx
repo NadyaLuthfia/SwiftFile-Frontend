@@ -245,10 +245,11 @@ function SiapCetak() {
 
   const handleSelesaiTanpaTtd = (id, namaDokumen) => {
     axios.post(`${API_BASE_URL}/siap-cetak/${id}/selesai`, {}, getAuthConfig())
-      .then(() => {
+      .then((res) => {
+        const idArsipBaru = res.data?.data?.id || res.data?.id || res.data?.arsip_id || id;
         navigate('/arsip-history', {
           state: { 
-            highlightId: id, 
+            highlightId: idArsipBaru, 
             nomorDokumen: namaDokumen,
             targetTab: activeTab,
             activeTab: activeTab
