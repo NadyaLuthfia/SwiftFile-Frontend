@@ -111,6 +111,7 @@ function SiapCetak() {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [printingId, setPrintingId] = useState(null);
+  const [completingId, setCompletingId] = useState(null); // STATE BARU UNTUK LOADING SELESAI
   const [highlightTarget, setHighlightTarget] = useState(null);
   const highlightedRef = useRef(null);
 
@@ -244,6 +245,7 @@ function SiapCetak() {
   };
 
   const handleSelesaiTanpaTtd = (id, namaDokumen) => {
+    setCompletingId(id); // KUNCI TOMBOL SAAT PROSES
     axios.post(`${API_BASE_URL}/siap-cetak/${id}/selesai`, {}, getAuthConfig())
       .then((res) => {
         const idArsipBaru = res.data?.data?.id || res.data?.id || res.data?.arsip_id || id;
@@ -256,7 +258,8 @@ function SiapCetak() {
           }
         });
       })
-      .catch(err => alert("Gagal menyelesaikan dokumen."));
+      .catch(err => alert("Gagal menyelesaikan dokumen."))
+      .finally(() => setCompletingId(null)); // BUKA KUNCI JIKA GAGAL/SELESAI
   };
 
   // HITUNG ANTREAN MENGGUNAKAN HELPER SAKTI
@@ -493,16 +496,16 @@ function SiapCetak() {
 
                         <button
                           type="button"
-                          disabled={!isPrinted}
+                          disabled={!isPrinted || completingId === file.id}
                           onClick={() => handleSelesaiTanpaTtd(file.id, file.nama_dokumen)}
                           title={!isPrinted ? "Cetak/Print dokumen fisik terlebih dahulu!" : "Selesaikan dokumen"}
                           className={`px-3.5 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all shadow-xs whitespace-nowrap flex items-center gap-1 ${
-                            isPrinted
+                            isPrinted && completingId !== file.id
                               ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 cursor-pointer'
                               : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-70 border border-slate-300'
                           }`}
                         >
-                          ✅ SELESAI
+                          {completingId === file.id ? '⏳ MEMPROSES...' : '✅ SELESAI'}
                         </button>
                       </div>
                     </div>
