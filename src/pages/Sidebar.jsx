@@ -9,16 +9,27 @@ function Sidebar() {
   const location = useLocation(); 
 
   const auth = useAuth();
-  const rawRole = auth?.role || auth?.user?.role || '';
+  
+  // PERBAIKAN: Ambil role dari Context atau langsung dari localStorage sebagai cadangan
+  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const rawRole = auth?.role || auth?.user?.role || storedUser?.role || localStorage.getItem('role') || '';
   const userRole = String(rawRole).toLowerCase().trim();
 
   const handleLogout = () => {
+    // 1. Bersihkan semua storage
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // 2. Panggil auth logout jika ada
     if (auth?.logoutUser) auth.logoutUser();
     else if (auth?.logout) auth.logout();
+
+    // 3. Pakai hard redirect ke /login
+    window.location.href = '/login';
   };
 
   const handleDashboardRedirect = () => {
-    if (userRole === 'master_admin' || userRole === 'master admin') {
+    if (userRole === 'master_admin' || userRole === 'master admin' || userRole === 'master_user') {
       navigate('/master-dashboard');
     } else if (userRole === 'admin') {
       navigate('/admin-dashboard');
@@ -38,7 +49,8 @@ function Sidebar() {
     return `${baseClass} text-slate-600 font-semibold hover:bg-white hover:text-sky-600 hover:shadow-xs border border-transparent hover:border-sky-100/60`;
   };
 
-  const isAdminOrMaster = ['admin', 'master_admin', 'master admin'].includes(userRole) || true; // Fallback true biar menu tetep tampil pas testing
+  // Cek apakah role termasuk admin, master admin, atau master user
+  const isAdminOrMaster = ['admin', 'master_admin', 'master admin', 'master_user', 'master user'].includes(userRole);
 
   return (
     <aside 
@@ -67,6 +79,7 @@ function Sidebar() {
           </p>
           
           <button 
+            type="button"
             onClick={handleDashboardRedirect}
             className={getMenuClass('/dashboard')}
           >
@@ -75,6 +88,7 @@ function Sidebar() {
           </button>
           
           <button 
+            type="button"
             onClick={() => navigate('/file-template')} 
             className={getMenuClass('/file-template')}
           >
@@ -83,6 +97,7 @@ function Sidebar() {
           </button>
 
           <button 
+            type="button"
             onClick={() => navigate('/draft-dokumen')} 
             className={getMenuClass('/draft-dokumen')}
           >
@@ -98,6 +113,7 @@ function Sidebar() {
           </p>
           
           <button 
+            type="button"
             onClick={() => navigate('/siap-cetak')}
             className={getMenuClass('/siap-cetak')}
           >
@@ -106,6 +122,7 @@ function Sidebar() {
           </button>
 
           <button 
+            type="button"
             onClick={() => navigate('/arsip-history')}
             className={getMenuClass('/arsip-history')}
           >
@@ -121,6 +138,7 @@ function Sidebar() {
               Supervision
             </p>
             <button 
+              type="button"
               onClick={() => navigate('/monitoring-data')} 
               className={getMenuClass('/monitoring-data')}
             >
@@ -137,6 +155,7 @@ function Sidebar() {
               Administration
             </p>
             <button 
+              type="button"
               onClick={() => navigate('/management-data')} 
               className={getMenuClass('/management-data')}
             >
@@ -151,6 +170,7 @@ function Sidebar() {
       {/* LOGOUT */}
       <div className="p-4 border-t border-sky-100/80">
         <button 
+          type="button"
           onClick={handleLogout}
           className="w-full flex items-center justify-center gap-3 py-2.5 rounded-2xl text-rose-500 hover:bg-rose-50 font-bold text-sm transition-transform duration-150 active:scale-95 cursor-pointer border border-transparent hover:border-rose-100 select-none"
         >
