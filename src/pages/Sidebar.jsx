@@ -1,24 +1,24 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-// FIX PATH: dari ../context ke ../context karena Sidebar ada di src/pages/
-import { useAuth } from '../context/AuthContext';
 
 function Sidebar() {
   const globalFont = { fontFamily: "'Poppins', sans-serif" };
   const navigate = useNavigate(); 
   const location = useLocation(); 
 
-  const auth = useAuth();
-  const rawRole = auth?.role || auth?.user?.role || '';
-  const userRole = String(rawRole).toLowerCase().trim();
-
+  // 🚪 FUNGSI LOGOUT (Dari Sidebar - Copy): Bersihkan data & langsung pindah rute secara fisik ke /login
   const handleLogout = () => {
-    if (auth?.logoutUser) auth.logoutUser();
-    else if (auth?.logout) auth.logout();
+    localStorage.clear(); 
+    window.location.href = '/login'; 
   };
 
+  // 👑 Mengambil role user yang sedang login dari localStorage (Dari Sidebar - Copy)
+  const userRole = localStorage.getItem('role'); 
+  const userRoleLower = userRole ? String(userRole).toLowerCase().trim() : '';
+
+  // 🌟 FIX LOGIKA REDIRECT (Dari Sidebar - Copy): Arahkan ke halaman dashboard yang pas dengan role-nya
   const handleDashboardRedirect = () => {
-    if (userRole === 'master_admin' || userRole === 'master admin') {
+    if (userRole === 'master_admin') {
       navigate('/master-dashboard');
     } else if (userRole === 'admin') {
       navigate('/admin-dashboard');
@@ -27,8 +27,17 @@ function Sidebar() {
     }
   };
 
+  // STYLE FUNGSI (Dari Sidebar asli)
   const getMenuClass = (path) => {
-    const isActive = location.pathname === path;
+    // Menyesuaikan logika aktif dari Sidebar - Copy (termasuk root '/')
+    const isDashboardPath = path === '/dashboard' && (
+      location.pathname === '/dashboard' || 
+      location.pathname === '/admin-dashboard' || 
+      location.pathname === '/master-dashboard' || 
+      location.pathname === '/'
+    );
+
+    const isActive = isDashboardPath || location.pathname === path;
     const baseClass = "w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl cursor-pointer text-sm transition-transform duration-150 active:scale-95 select-none";
     
     if (isActive) {
@@ -38,14 +47,15 @@ function Sidebar() {
     return `${baseClass} text-slate-600 font-semibold hover:bg-white hover:text-sky-600 hover:shadow-xs border border-transparent hover:border-sky-100/60`;
   };
 
-  const isAdminOrMaster = ['admin', 'master_admin', 'master admin'].includes(userRole) || true; // Fallback true biar menu tetep tampil pas testing
+  // Menentukan apakah user adalah admin atau master_admin
+  const isAdminOrMaster = ['admin', 'master_admin', 'master admin'].includes(userRoleLower);
 
   return (
     <aside 
       className="w-64 bg-[#F4F8FC] border-r border-sky-100 flex flex-col h-full overflow-hidden shadow-xs"
       style={globalFont}
     >
-      {/* LOGO AREA */}
+      {/* LOGO AREA (Dari Sidebar asli) */}
       <div className="pt-7 pb-5 px-6 flex flex-col items-center justify-center text-center gap-2.5 select-none mb-2">
         <img 
           src="/logo-sucofindo.png" 
@@ -57,7 +67,7 @@ function Sidebar() {
         </h1>
       </div>
 
-      {/* NAVIGATION */}
+      {/* NAVIGATION (Style dari Sidebar asli) */}
       <nav className="flex-1 px-4 space-y-3 overflow-y-auto custom-scrollbar">
         
         {/* Menu Utama */}
@@ -68,7 +78,7 @@ function Sidebar() {
           
           <button 
             onClick={handleDashboardRedirect}
-            className={getMenuClass('/dashboard')}
+            className={getMenuClass('/dashboard')} 
           >
             <span className="text-base">🏠</span>
             <span>Dashboard</span>
@@ -114,7 +124,7 @@ function Sidebar() {
           </button>
         </div>
 
-        {/* MONITORING DATA */}
+        {/* MONITORING DATA (Logic dari Copy, Style dari Asli) */}
         {isAdminOrMaster && (
           <div className="pt-3 space-y-1.5 border-t border-sky-100/80">
             <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] px-4 mb-2 select-none">
@@ -130,7 +140,7 @@ function Sidebar() {
           </div>
         )}
 
-        {/* MANAGEMENT DATA */}
+        {/* MANAGEMENT DATA (Logic dari Copy, Style dari Asli) */}
         {isAdminOrMaster && (
           <div className="pt-3 space-y-1.5 border-t border-sky-100/80">
             <p className="text-[10px] font-black text-sky-600 uppercase tracking-[0.2em] px-4 mb-2 select-none">
@@ -148,7 +158,7 @@ function Sidebar() {
 
       </nav>
 
-      {/* LOGOUT */}
+      {/* LOGOUT (Style dari Sidebar asli) */}
       <div className="p-4 border-t border-sky-100/80">
         <button 
           onClick={handleLogout}

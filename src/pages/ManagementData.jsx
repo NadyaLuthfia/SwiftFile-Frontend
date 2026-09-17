@@ -170,7 +170,7 @@ function ManagementData() {
     setModalConfirm({
       isOpen: true,
       title: `Nonaktifkan Data ${tipe.toUpperCase()}?`,
-      message: `Apakah Anda yakin ingin menonaktifkan data ${tipe} ini?`,
+      message: `Apakah Anda yakin ingin menghapus data ${tipe} ini?`,
       actionType: 'danger',
       onConfirm: () => {
         axios.delete(`http://localhost:8000/api/${tipe}/${id}`, {
@@ -178,31 +178,10 @@ function ManagementData() {
         })
         .then(() => {
           muatSemuaData();
-          showToast(`Data ${tipe} berhasil dinonaktifkan.`, 'success');
+          showToast(`Data ${tipe} berhasil dihapus.`, 'success');
         })
         .catch(err => {
           showToast(parseErrorMessage(err, `Gagal mengubah status data ${tipe}`), 'error');
-        });
-      }
-    });
-  };
-
-  const hapusPermanenData = (id, tipe) => {
-    setModalConfirm({
-      isOpen: true,
-      title: `HAPUS PERMANEN ${tipe.toUpperCase()}?`,
-      message: `PERINGATAN: Data ${tipe} ini akan dihapus permanen dari sistem dan tidak bisa dikembalikan lagi! Yakin?`,
-      actionType: 'danger',
-      onConfirm: () => {
-        axios.delete(`http://localhost:8000/api/${tipe}/${id}/permanent`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        })
-        .then(() => {
-          muatSemuaData();
-          showToast(`Data ${tipe} berhasil dihapus permanen!`, 'success');
-        })
-        .catch(err => {
-          showToast(parseErrorMessage(err, `Gagal menghapus permanen data ${tipe}`), 'error');
         });
       }
     });
@@ -613,14 +592,10 @@ function ManagementData() {
                               
                               {(userRole === 'admin' || userRole === 'master_admin') && (
                                 k.status_aktif === 1 || k.status_aktif === '1' ? (
-                                  <button type="button" onClick={() => hapusData(k.id, 'karyawan')} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all duration-150 cursor-pointer" title="Nonaktifkan Karyawan">✕</button>
+                                  <button type="button" onClick={() => hapusData(k.id, 'karyawan')} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all duration-150 cursor-pointer" title="Nonaktifkan Karyawan">🗑️</button>
                                 ) : (
                                   <button type="button" onClick={() => pulihkanKaryawan(k.id)} className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-all duration-150 cursor-pointer" title="Aktifkan Kembali">✅</button>
                                 )
-                              )}
-
-                              {userRole === 'master_admin' && (
-                                <button type="button" onClick={() => hapusPermanenData(k.id, 'karyawan')} className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-600 transition-all duration-150 cursor-pointer" title="Hapus Permanen">🗑️</button>
                               )}
                             </div>
                           </td>
@@ -682,10 +657,7 @@ function ManagementData() {
                               <div className="flex justify-end gap-1.5">
                                 <button type="button" onClick={() => bukaModalEdit(j, 'jabatan')} className="p-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-600 cursor-pointer transition-all" title="Edit">✏️</button>
                                 {(userRole === 'admin' || userRole === 'master_admin') && (
-                                  <button type="button" onClick={() => hapusData(j.id, 'jabatan')} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer transition-all" title="Nonaktifkan">✕</button>
-                                )}
-                                {userRole === 'master_admin' && (
-                                  <button type="button" onClick={() => hapusPermanenData(j.id, 'jabatan')} className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-600 cursor-pointer transition-all" title="Hapus Permanen">🗑️</button>
+                                  <button type="button" onClick={() => hapusData(j.id, 'jabatan')} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer transition-all" title="Nonaktifkan">🗑️</button>
                                 )}
                               </div>
                             </td>
@@ -748,10 +720,7 @@ function ManagementData() {
                               <div className="flex justify-end gap-1.5">
                                 <button type="button" onClick={() => bukaModalEdit(b, 'bidang')} className="p-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-600 cursor-pointer transition-all" title="Edit">✏️</button>
                                 {(userRole === 'admin' || userRole === 'master_admin') && (
-                                  <button type="button" onClick={() => hapusData(b.id, 'bidang')} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer transition-all" title="Nonaktifkan">✕</button>
-                                )}
-                                {userRole === 'master_admin' && (
-                                  <button type="button" onClick={() => hapusPermanenData(b.id, 'bidang')} className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-600 cursor-pointer transition-all" title="Hapus Permanen">🗑️</button>
+                                  <button type="button" onClick={() => hapusData(b.id, 'bidang')} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer transition-all" title="Nonaktifkan">🗑️</button>
                                 )}
                               </div>
                             </td>
