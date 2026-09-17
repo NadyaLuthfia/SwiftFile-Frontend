@@ -111,7 +111,7 @@ function SiapCetak() {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [printingId, setPrintingId] = useState(null);
-  const [completingId, setCompletingId] = useState(null); // STATE BARU UNTUK LOADING SELESAI
+  const [completingId, setCompletingId] = useState(null); 
   const [highlightTarget, setHighlightTarget] = useState(null);
   const highlightedRef = useRef(null);
 
@@ -132,7 +132,6 @@ function SiapCetak() {
       setActiveTab(targetTabInput);
     }
 
-    // Ekstrak target highlight dari semua kemungkinan nama property
     const rawTarget = 
       searchParams.get('highlight') || 
       searchParams.get('id') || 
@@ -154,7 +153,6 @@ function SiapCetak() {
         
       setHighlightTarget(cleanTarget);
 
-      // Pertahankan efek highlight selama 15 detik (jika tidak diklik print)
       const timer = setTimeout(() => {
         setHighlightTarget(null);
       }, 15000); 
@@ -181,7 +179,6 @@ function SiapCetak() {
     ambilAntreanCetak();
   }, [ambilAntreanCetak]);
 
-  // FUNGSI PENCOCOKAN SAKTI: Cek apakah item ini yang di-highlight (ID/Nama Dokumen)
   const isItemHighlighted = useCallback((file) => {
     if (!highlightTarget) return false;
     
@@ -198,7 +195,6 @@ function SiapCetak() {
            (targetStr.length > 2 && (namaDoc.includes(targetStr) || namaArsip.includes(targetStr) || targetStr.includes(namaDoc)));
   }, [highlightTarget]);
 
-  // CARI ITEM HIGHLIGHT DARI LIST & OTOMATIS PINDAHKAN TAB JIKA DITEMUKAN
   const targetHighlightItem = useMemo(() => {
     if (!highlightTarget || antreanList.length === 0) return null;
     return antreanList.find(f => isItemHighlighted(f)) || null;
@@ -211,7 +207,6 @@ function SiapCetak() {
     }
   }, [targetHighlightItem]);
 
-  // AUTO SCROLL KE BERKAS HIGHLIGHT
   useEffect(() => {
     if (targetHighlightItem && highlightedRef.current && !loading) {
       const timer = setTimeout(() => {
@@ -223,7 +218,6 @@ function SiapCetak() {
 
   const handlePrintAction = (id, namaDokumen) => {
     setPrintingId(id);
-    // MATIKAN PENANDA BERKAS SECARA INSTAN KETIKA TOMBOL PRINT DIKLIK
     setHighlightTarget(null);
 
     axios.put(`${API_BASE_URL}/siap-cetak/${id}/status`, { copies: 1, pages: 'All' }, getAuthConfig())
@@ -244,25 +238,40 @@ function SiapCetak() {
       .finally(() => setPrintingId(null));
   };
 
-  const handleSelesaiTanpaTtd = (id, namaDokumen) => {
-    setCompletingId(id); // KUNCI TOMBOL SAAT PROSES
+  // 🌟 PERBAIKAN UTAMA: KIRIM NAMA PERSISI & SIMPAN KE SESSION STORAGE
+  const handleSelesaiTanpaTtd = (file) => {
+    const id = file.id;
+    // Menggunakan Nama Lengkap Berkas Presisi (Misal: "BA Penyerahan - 026/BTG-IX/BA/2026")
+    const namaPresisi = file.nama_arsip_display || file.nomor_dokumen || file.nama_dokumen;
+    const targetTabDoc = dapatkanKategoriDokumen(file) || activeTab;
+
+    setCompletingId(id);
     axios.post(`${API_BASE_URL}/siap-cetak/${id}/selesai`, {}, getAuthConfig())
       .then((res) => {
-        const idArsipBaru = res.data?.data?.id || res.data?.id || res.data?.arsip_id || id;
+        const idArsipBaru = res.data?.data?.id || res.data?.id || res.data?.arsip_id || res.data?.dokumen_id || id;
+        
+        // Simpan ke Session Storage agar penanda PERSISTEN walau pindah-pindah halaman
+        const highlightStorage = {
+          highlightId: idArsipBaru,
+          nomorDokumen: namaPresisi,
+          targetTab: targetTabDoc,
+          timestamp: Date.now()
+        };
+        sessionStorage.setItem('active_arsip_highlight', JSON.stringify(highlightStorage));
+
         navigate('/arsip-history', {
           state: { 
             highlightId: idArsipBaru, 
-            nomorDokumen: namaDokumen,
-            targetTab: activeTab,
-            activeTab: activeTab
+            nomorDokumen: namaPresisi,
+            targetTab: targetTabDoc,
+            activeTab: targetTabDoc
           }
         });
       })
       .catch(err => alert("Gagal menyelesaikan dokumen."))
-      .finally(() => setCompletingId(null)); // BUKA KUNCI JIKA GAGAL/SELESAI
+      .finally(() => setCompletingId(null));
   };
 
-  // HITUNG ANTREAN MENGGUNAKAN HELPER SAKTI
   const tabCounts = useMemo(() => {
     const counts = { ba_penyerahan: 0, ba_kerusakan: 0, surat_tugas: 0, tor_barang: 0, tor_jasa: 0 };
     antreanList.forEach(item => {
@@ -275,7 +284,6 @@ function SiapCetak() {
     return counts;
   }, [antreanList]);
 
-  // DAFTAR TERFILTER DENGAN HELPER KATEGORI REKURSIF
   const daftarFileTerfilter = useMemo(() => {
     const lowerSearch = searchTerm.toLowerCase();
     return antreanList.filter(item => {
@@ -333,7 +341,6 @@ function SiapCetak() {
             </div>
           </section>
 
-          {/* BADGE TAB */}
           <section className="bg-white p-2.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50">
             <div className="grid grid-cols-5 gap-2 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60 w-full">
               {[
@@ -373,7 +380,6 @@ function SiapCetak() {
             </div>
           </section>
 
-          {/* LIST DOKUMEN */}
           {loading ? (
             <div className="bg-white rounded-3xl border border-sky-100/80 p-16 text-center space-y-4 shadow-xs animate-pulse">
               <div className="text-4xl text-sky-500 animate-spin inline-block">⏳</div>
@@ -396,8 +402,6 @@ function SiapCetak() {
                 {daftarFileTerfilter.map((file) => {
                   const namaTampilan = file.nama_arsip_display || file.nama_dokumen;
                   const isPrinted = Boolean(file.tanggal_cetak);
-                  
-                  // CEK HIGHLIGHT DENGAN FUNGSIONALITAS BARU
                   const isNew = isItemHighlighted(file);
 
                   const namaItem = dapatkanValueSakti(file, 'ITEM') || dapatkanValueSakti(file, 'NO_ITEM');
@@ -416,14 +420,13 @@ function SiapCetak() {
                           : 'bg-white border border-sky-100/80 hover:border-sky-300 hover:scale-[1.015] hover:shadow-md'
                       }`}
                     >
-                      {/* DETAIL FILE */}
                       <div className="flex items-center gap-3.5">
                         <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0 transition-all ${
                           isNew 
                             ? 'bg-gradient-to-br from-sky-400 to-blue-600 text-white shadow-md border border-sky-300' 
                             : 'bg-sky-50 border border-sky-100'
                         }`}>
-                          {isNew ? '📄' : '📄'}
+                          📄
                         </div>
                         
                         <div className="min-w-0 space-y-0.5">
@@ -477,7 +480,6 @@ function SiapCetak() {
                         </div>
                       </div>
 
-                      {/* ACTION PIPELINE */}
                       <div className="flex items-center justify-center gap-2.5">
                         <button 
                           type="button"
@@ -497,7 +499,7 @@ function SiapCetak() {
                         <button
                           type="button"
                           disabled={!isPrinted || completingId === file.id}
-                          onClick={() => handleSelesaiTanpaTtd(file.id, file.nama_dokumen)}
+                          onClick={() => handleSelesaiTanpaTtd(file)}
                           title={!isPrinted ? "Cetak/Print dokumen fisik terlebih dahulu!" : "Selesaikan dokumen"}
                           className={`px-3.5 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all shadow-xs whitespace-nowrap flex items-center gap-1 ${
                             isPrinted && completingId !== file.id

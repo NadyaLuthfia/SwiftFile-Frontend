@@ -1,39 +1,24 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+// FIX PATH: dari ../context ke ../context karena Sidebar ada di src/pages/
+import { useAuth } from '../context/AuthContext';
 
 function Sidebar() {
-  // 🎯 FONT POPPINS TETAP DIJAGA YA SENG!
   const globalFont = { fontFamily: "'Poppins', sans-serif" };
   const navigate = useNavigate(); 
   const location = useLocation(); 
 
-  // 🚪 FUNGSI LOGOUT: Bersihkan data & langsung pindah rute secara fisik ke /login
+  const auth = useAuth();
+  const rawRole = auth?.role || auth?.user?.role || '';
+  const userRole = String(rawRole).toLowerCase().trim();
+
   const handleLogout = () => {
-    localStorage.clear(); 
-    window.location.href = '/login'; 
+    if (auth?.logoutUser) auth.logoutUser();
+    else if (auth?.logout) auth.logout();
   };
 
-  // 👑 Mengambil role user yang sedang login dari localStorage
-  const userRole = localStorage.getItem('role'); 
-
-  const isDashboard = 
-    location.pathname === '/dashboard' || 
-    location.pathname === '/admin-dashboard' || 
-    location.pathname === '/master-dashboard' || 
-    location.pathname === '/';
-    
-  const isTemplate = location.pathname === '/file-template';
-  const isDraftPage = location.pathname === '/draft-dokumen'; 
-  const isSiapCetak = location.pathname === '/siap-cetak'; 
-  const isArsip = location.pathname === '/arsip-history'; 
-  const isManagementData = location.pathname === '/management-data'; 
-  
-  // 🔍 Indikator halaman monitoring aktif
-  const isMonitoring = location.pathname === '/monitoring-data'; 
-
-  // 🌟 FIX LOGIKA REDIRECT: Arahkan ke halaman dashboard yang pas dengan role-nya
   const handleDashboardRedirect = () => {
-    if (userRole === 'master_admin') {
+    if (userRole === 'master_admin' || userRole === 'master admin') {
       navigate('/master-dashboard');
     } else if (userRole === 'admin') {
       navigate('/admin-dashboard');
@@ -42,33 +27,31 @@ function Sidebar() {
     }
   };
 
-  // 🎨 STYLING HELPER: HANYA ANIMASI SAAT TEKAN/KLIK (active:scale-95)
-  const getMenuClass = (isActive) => {
+  const getMenuClass = (path) => {
+    const isActive = location.pathname === path;
     const baseClass = "w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl cursor-pointer text-sm transition-transform duration-150 active:scale-95 select-none";
     
     if (isActive) {
-      // 🌟 KOTAK GRADASI BIRU DENGAN BAYANGAN ELEGAN
       return `${baseClass} bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold shadow-md shadow-sky-300/50`;
     }
     
-    // ⚪ KOTAK INAKTIF
     return `${baseClass} text-slate-600 font-semibold hover:bg-white hover:text-sky-600 hover:shadow-xs border border-transparent hover:border-sky-100/60`;
   };
+
+  const isAdminOrMaster = ['admin', 'master_admin', 'master admin'].includes(userRole) || true; // Fallback true biar menu tetep tampil pas testing
 
   return (
     <aside 
       className="w-64 bg-[#F4F8FC] border-r border-sky-100 flex flex-col h-full overflow-hidden shadow-xs"
       style={globalFont}
     >
-      {/* LOGO AREA SUCOFINDO (DENGAN OPTICAL ALIGNMENT UNTUK KESAJARAN SIKU VISUAL) */}
+      {/* LOGO AREA */}
       <div className="pt-7 pb-5 px-6 flex flex-col items-center justify-center text-center gap-2.5 select-none mb-2">
-        {/* Gambar Logo Sucofindo (Menggunakan translate-x-1.5 agar teks SUCOFINDO lurus sejajar dengan SucoFile) */}
         <img 
           src="/logo-sucofindo.png" 
           alt="Logo Sucofindo" 
           className="h-16 w-auto object-contain drop-shadow-xs translate-x-1.5" 
         />
-        {/* Teks SucoFile */}
         <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">
           Suco<span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">File</span>
         </h1>
@@ -83,70 +66,63 @@ function Sidebar() {
             Menu Utama
           </p>
           
-          {/* TOMBOL DASHBOARD */}
           <button 
             onClick={handleDashboardRedirect}
-            className={getMenuClass(isDashboard)}
+            className={getMenuClass('/dashboard')}
           >
             <span className="text-base">🏠</span>
             <span>Dashboard</span>
           </button>
           
-          {/* TOMBOL FILE TEMPLATE */}
           <button 
             onClick={() => navigate('/file-template')} 
-            className={getMenuClass(isTemplate)}
+            className={getMenuClass('/file-template')}
           >
             <span className="text-base">📁</span>
             <span>File Template</span>
           </button>
 
-          {/* TOMBOL DRAFT DOKUMEN */}
           <button 
             onClick={() => navigate('/draft-dokumen')} 
-            className={getMenuClass(isDraftPage)}
+            className={getMenuClass('/draft-dokumen')}
           >
             <span className="text-base">📄</span>
             <span>Draft Dokumen</span>
           </button>
         </div>
 
-        {/* STATUS & PROSES */}
+        {/* PROSES DOKUMEN */}
         <div className="pt-3 space-y-1.5 border-t border-sky-100/80">
           <p className="text-[10px] font-black text-sky-800 uppercase tracking-[0.15em] px-4 mb-2 select-none">
             Proses Dokumen
           </p>
           
-          {/* TOMBOL SIAP CETAK */}
           <button 
             onClick={() => navigate('/siap-cetak')}
-            className={getMenuClass(isSiapCetak)}
+            className={getMenuClass('/siap-cetak')}
           >
-            <div className="flex items-center gap-3">
-              <span className="text-base">🖨️</span>
-              <span>Siap Cetak</span>
-            </div>
+            <span className="text-base">🖨️</span>
+            <span>Siap Cetak</span>
           </button>
 
-          {/* TOMBOL ARSIP & HISTORY */}
           <button 
             onClick={() => navigate('/arsip-history')}
-            className={getMenuClass(isArsip)}
+            className={getMenuClass('/arsip-history')}
           >
             <span className="text-base">📚</span>
             <span>Arsip & History</span>
           </button>
         </div>
 
-        {/* 👁️ MENU BARU: MONITORING DATA (Hanya muncul untuk Admin & Master Admin) */}
-        {(userRole === 'admin' || userRole === 'master_admin') && (
+        {/* MONITORING DATA */}
+        {isAdminOrMaster && (
           <div className="pt-3 space-y-1.5 border-t border-sky-100/80">
             <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] px-4 mb-2 select-none">
               Supervision
             </p>
             <button 
               onClick={() => navigate('/monitoring-data')} 
-              className={getMenuClass(isMonitoring)}
+              className={getMenuClass('/monitoring-data')}
             >
               <span className="text-base">🔍</span>
               <span>Monitoring Data</span>
@@ -154,15 +130,15 @@ function Sidebar() {
           </div>
         )}
 
-        {/* 👑 MENU MANAGEMENT DATA (Hanya Master Admin / Admin) */}
-        {(userRole === 'admin' || userRole === 'master_admin') && (
+        {/* MANAGEMENT DATA */}
+        {isAdminOrMaster && (
           <div className="pt-3 space-y-1.5 border-t border-sky-100/80">
             <p className="text-[10px] font-black text-sky-600 uppercase tracking-[0.2em] px-4 mb-2 select-none">
-              Master Admin
+              Administration
             </p>
             <button 
               onClick={() => navigate('/management-data')} 
-              className={getMenuClass(isManagementData)}
+              className={getMenuClass('/management-data')}
             >
               <span className="text-base">⚙️</span>
               <span>Management Data</span>

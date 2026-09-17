@@ -111,6 +111,11 @@ const cekApakahHighlighted = (file, target) => {
   if (!target || !file) return false;
   if (file === target) return true;
 
+  const fileNama = (file.nama_dokumen || file.nomor_dokumen || '').toLowerCase().trim();
+  const targetNama = (target.nama_dokumen || target.nomor_dokumen || target.nomor || '').toLowerCase().trim();
+
+  if (fileNama && targetNama && fileNama === targetNama) return true;
+
   const listKeyID = ['id', 'dokumen_id', 'id_dokumen', 'arsip_id', 'id_arsip', 'id_history', 'history_id', 'id_cetak'];
   
   return listKeyID.some(key => 
@@ -282,15 +287,13 @@ function ArsipHistory() {
   const [itemToToggle, setItemToToggle] = useState(null);
   const [loadingToggle, setLoadingToggle] = useState(false);
 
-  // 🔔 STATE NOTIFIKASI SAMA PERSIS DENGAN HALAMAN LOGIN
   const [notification, setNotification] = useState({
     show: false,
     message: '',
-    type: 'success' // 'success' | 'error' | 'info'
+    type: 'success'
   });
   const toastTimerRef = useRef(null);
 
-  // 💡 FUNGSI BANTUAN NOTIFIKASI (TAMPILAN & LOGIKA IDENTIK LOGIN.JSX)
   const showToast = useCallback((message, type = 'success') => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     
@@ -337,10 +340,40 @@ function ArsipHistory() {
     ambilDataHistory();
   }, [ambilDataHistory]);
 
+  // 🌟 DUKUNGAN SESSION STORAGE AGAR PENANDA TETAP MENYALA WALAUPUN PINDAH HALAMAN
   useEffect(() => {
-    const rawHighlight = searchParams.get('highlight') || location.state?.highlightId || location.state?.highlight_id || location.state?.id;
-    const rawNomor = location.state?.nomorDokumen || location.state?.namaDokumen;
-    const targetTabNavigasi = searchParams.get('tab') || location.state?.targetTab || location.state?.activeTab || location.state?.tab || location.state?.kategori;
+    let rawHighlight = searchParams.get('highlight') || location.state?.highlightId || location.state?.highlight_id || location.state?.id;
+    let rawNomor = location.state?.nomorDokumen || location.state?.namaDokumen;
+    let targetTabNavigasi = searchParams.get('tab') || location.state?.targetTab || location.state?.activeTab || location.state?.tab || location.state?.kategori;
+
+    // Cek Session Storage jika navigasi kosong (misal berpindah lewat Sidebar)
+    if (!rawHighlight && !rawNomor && !targetTabNavigasi) {
+      try {
+        const savedHighlightStr = sessionStorage.getItem('active_arsip_highlight');
+        if (savedHighlightStr) {
+          const saved = JSON.parse(savedHighlightStr);
+          // Berlaku selama 10 menit
+          if (saved && (Date.now() - (saved.timestamp || 0) < 600000)) {
+            rawHighlight = saved.highlightId;
+            rawNomor = saved.nomorDokumen;
+            targetTabNavigasi = saved.targetTab;
+          } else {
+            sessionStorage.removeItem('active_arsip_highlight');
+          }
+        }
+      } catch (e) {
+        console.error("Gagal membaca sessionStorage highlight:", e);
+      }
+    } else if (rawHighlight || rawNomor) {
+      try {
+        sessionStorage.setItem('active_arsip_highlight', JSON.stringify({
+          highlightId: rawHighlight,
+          nomorDokumen: rawNomor,
+          targetTab: targetTabNavigasi,
+          timestamp: Date.now()
+        }));
+      } catch (e) {}
+    }
 
     let cleanId = null;
     if (rawHighlight) {
@@ -357,15 +390,10 @@ function ArsipHistory() {
         nomor: rawNomor ? String(rawNomor).trim() : null,
         tab: targetTabNavigasi || null
       });
-
-      const timer = setTimeout(() => {
-        setActiveHighlight(null);
-      }, 25000);
-
-      return () => clearTimeout(timer);
     }
   }, [location, searchParams]);
 
+  // 🌟 ALGORITMA PENCOCOKAN DOKUMEN HIGHLIGHT SANGAT PRESISI
   const targetHighlightItem = useMemo(() => {
     if (!activeHighlight || antreanList.length === 0) return null;
 
@@ -382,6 +410,16 @@ function ArsipHistory() {
     }
 
     const cariDokumen = (daftar) => {
+      // 1. MATCH EXACT NAMA DOKUMEN (Paling Akurat: "BA Penyerahan - 026/BTG-IX/BA/2026")
+      if (targetNomor) {
+        const matchExact = daftar.find(f => {
+          const nomDoc = (f.nama_dokumen || f.nomor_dokumen || f.no_dokumen || '').toLowerCase().trim();
+          return nomDoc && nomDoc === targetNomor;
+        });
+        if (matchExact) return matchExact;
+      }
+
+      // 2. MATCH BERDASARKAN ID UNIK
       if (targetId) {
         const listKeyID = ['dokumen_id', 'arsip_id', 'id_dokumen', 'id_arsip', 'id', 'id_history', 'history_id', 'id_cetak'];
         
@@ -389,20 +427,18 @@ function ArsipHistory() {
           listKeyID.some(key => f[key] !== undefined && f[key] !== null && String(f[key]).trim() === String(targetId).trim())
         );
         if (matchById) return matchById;
-
-        const matchByNomorText = daftar.find(f => {
-          const nomDoc = (f.nomor_dokumen || f.no_dokumen || f.nomor || f.nama_dokumen || '').toLowerCase().trim();
-          return nomDoc && nomDoc === targetId.toLowerCase().trim();
-        });
-        if (matchByNomorText) return matchByNomorText;
       }
 
-      if (targetNomor) {
-        const matchNomor = daftar.find(f => {
-          const nomDoc = (f.nomor_dokumen || f.no_dokumen || f.nomor || f.nama_dokumen || '').toLowerCase().trim();
-          return nomDoc && (nomDoc === targetNomor || nomDoc.includes(targetNomor) || targetNomor.includes(nomDoc));
-        });
-        if (matchNomor) return matchNomor;
+      // 3. MATCH PARTIAL NOMOR SPESIFIK (Kecuali Kata Kategori Umum)
+      if (targetNomor && targetNomor.length > 5) {
+        const kataKategoriUmum = ['ba penyerahan', 'ba kerusakan', 'surat tugas', 'tor barang', 'tor jasa'];
+        if (!kataKategoriUmum.includes(targetNomor)) {
+          const matchPartial = daftar.find(f => {
+            const nomDoc = (f.nama_dokumen || f.nomor_dokumen || f.no_dokumen || '').toLowerCase().trim();
+            return nomDoc && (nomDoc.includes(targetNomor) || targetNomor.includes(nomDoc));
+          });
+          if (matchPartial) return matchPartial;
+        }
       }
 
       return null;
@@ -465,7 +501,6 @@ function ArsipHistory() {
       setIsToggleModalOpen(false);
       setItemToToggle(null);
 
-      // ✨ NOTIFIKASI SAMA PERSIS SEPERTI HALAMAN LOGIN
       showToast(`Dokumen berhasil ${statusTeks}.`, 'success');
 
       ambilDataHistory();
@@ -584,7 +619,6 @@ function ArsipHistory() {
       <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
       
       <style>{`
-        /* --- ANIMASI MELAYANG PELAN NAIK TURUN SLOW & GARIS HIJAU --- */
         @keyframes melayangPelan {
           0%, 100% { 
             transform: translateY(0px); 
@@ -621,7 +655,6 @@ function ArsipHistory() {
         }
       `}</style>
 
-      {/* 🌟 MODAL NOTIFIKASI SAMA PERSIS DENGAN HALAMAN LOGIN */}
       {notification.show && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-[9999] flex items-center justify-center p-4 transition-all">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-sky-100 w-[340px] p-6 text-center space-y-4 animate-pop relative">
@@ -748,7 +781,6 @@ function ArsipHistory() {
         </div>
       </main>
 
-      {/* 🌟 MODAL DETAIL DOKUMEN */}
       {modalTerbuka && dokumenTerpilih && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs transition-all">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-sky-100 space-y-5 animate-pop">
@@ -831,7 +863,6 @@ function ArsipHistory() {
         </div>
       )}
 
-      {/* 🌟 POP-UP MODAL TOGGLE STATUS */}
       {isToggleModalOpen && itemToToggle && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 transition-all">
           <div className="bg-white rounded-3xl shadow-2xl border border-sky-100 w-full max-w-xs overflow-hidden p-6 text-center space-y-4 animate-pop relative">
