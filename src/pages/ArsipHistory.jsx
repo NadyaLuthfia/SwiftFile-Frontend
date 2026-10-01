@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import axios from 'axios'; 
 
@@ -43,8 +43,8 @@ const dapatkanTeksCariPresisi = (item) => {
 
   const kataBawaan = /ba|penyerahan|kerusakan|surat|tugas|tor|barang|jasa|btg|viii|2026|januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember/gi;
 
-  const namaDoc = (item.nama_dokumen || '').replace(kataBawaan, '').trim();
-  const nomorDoc = (item.nomor_dokumen || item.no_dokumen || item.nomor || '').replace(kataBawaan, '').trim();
+  const namaDoc = String(item.nama_dokumen || '').replace(kataBawaan, '').trim();
+  const nomorDoc = String(item.nomor_dokumen || item.no_dokumen || item.nomor || '').replace(kataBawaan, '').trim();
 
   const itemVal = dapatkanValueSakti(item, 'ITEM') || dapatkanValueSakti(item, 'NO_ITEM') || dapatkanValueSakti(item, 'NAMA_BARANG') || '';
   const alatVal = dapatkanValueSakti(item, 'NAMA_ALAT') || dapatkanValueSakti(item, 'ALAT') || '';
@@ -60,16 +60,16 @@ const dapatkanTeksCariPresisi = (item) => {
 const dapatkanKategoriDokumen = (item) => {
   if (!item) return 'ba_penyerahan';
 
-  const katEksplisit = (item.kategori || item.jenis_dokumen || item.tipe_dokumen || item.tipe || '').toLowerCase();
+  const katEksplisit = String(item.kategori || item.jenis_dokumen || item.tipe_dokumen || item.tipe || '').toLowerCase();
   if (katEksplisit.includes('tor_jasa') || katEksplisit === 'jasa') return 'tor_jasa';
   if (katEksplisit.includes('tor_barang') || katEksplisit === 'barang') return 'tor_barang';
   if (katEksplisit.includes('ba_kerusakan') || katEksplisit === 'kerusakan') return 'ba_kerusakan';
   if (katEksplisit.includes('ba_penyerahan') || katEksplisit === 'penyerahan') return 'ba_penyerahan';
   if (katEksplisit.includes('surat_tugas') || katEksplisit === 'tugas') return 'surat_tugas';
 
-  const namaDoc = item.nama_dokumen || '';
-  const nomorDoc = item.nomor_dokumen || item.no_dokumen || item.nomor || '';
-  const pekerjaanVal = dapatkanValueSakti(item, 'NAMA_PEKERJAAN') || dapatkanValueSakti(item, 'PEKERJAAN') || dapatkanValueSakti(item, 'KEGIATAN') || dapatkanValueSakti(item, 'JASA') || '';
+  const namaDoc = String(item.nama_dokumen || '');
+  const nomorDoc = String(item.nomor_dokumen || item.no_dokumen || item.nomor || '');
+  const pekerjaanVal = String(dapatkanValueSakti(item, 'NAMA_PEKERJAAN') || dapatkanValueSakti(item, 'PEKERJAAN') || dapatkanValueSakti(item, 'KEGIATAN') || dapatkanValueSakti(item, 'JASA') || '');
 
   const teks = `${namaDoc} ${nomorDoc} ${pekerjaanVal}`.toLowerCase();
 
@@ -111,8 +111,8 @@ const cekApakahHighlighted = (file, target) => {
   if (!target || !file) return false;
   if (file === target) return true;
 
-  const fileNama = (file.nama_dokumen || file.nomor_dokumen || '').toLowerCase().trim();
-  const targetNama = (target.nama_dokumen || target.nomor_dokumen || target.nomor || '').toLowerCase().trim();
+  const fileNama = String(file.nama_dokumen || file.nomor_dokumen || '').toLowerCase().trim();
+  const targetNama = String(target.nama_dokumen || target.nomor_dokumen || target.nomor || '').toLowerCase().trim();
 
   if (fileNama && targetNama && fileNama === targetNama) return true;
 
@@ -130,9 +130,9 @@ const cekApakahHighlighted = (file, target) => {
 // HELPER FORMAT TANGGAL
 const formatTanggalIndo = (dateString) => {
   if (!dateString) return null;
-  const safeDateString = dateString.replace(' ', 'T'); 
+  const safeDateString = String(dateString).replace(' ', 'T'); 
   const date = new Date(safeDateString);
-  if (isNaN(date.getTime())) return dateString;
+  if (isNaN(date.getTime())) return String(dateString);
   const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   
   return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
@@ -140,7 +140,7 @@ const formatTanggalIndo = (dateString) => {
 
 // ================= SUB-KOMPONEN BARIS DOKUMEN =================
 const ArsipRow = React.memo(({ file, printingId, onCetakLagi, onToggleAktif, onBukaModal, activeTab, isHighlighted, highlightedRef, userRole }) => {
-  const isAktif = String(file.status_aktif) === '1' || file.status_aktif === true;
+  const isAktif = String(file.status_aktif) !== '0' && file.status_aktif !== 0 && file.status_aktif !== false;
 
   const namaItem = dapatkanValueSakti(file, 'ITEM') || dapatkanValueSakti(file, 'NO_ITEM') || dapatkanValueSakti(file, 'NAMA_BARANG');
   const namaAlat = dapatkanValueSakti(file, 'NAMA_ALAT') || dapatkanValueSakti(file, 'ALAT') || dapatkanValueSakti(file, 'NAMA_BARANG') || dapatkanValueSakti(file, 'ITEM');
@@ -151,7 +151,8 @@ const ArsipRow = React.memo(({ file, printingId, onCetakLagi, onToggleAktif, onB
   const pengadaan = dapatkanValueSakti(file, 'PENGADAAN') || dapatkanValueSakti(file, 'NAMA_DRAFT') || dapatkanValueSakti(file, 'NAMA_BARANG');
   const pekerjaanJasa = dapatkanValueSakti(file, 'NAMA_PEKERJAAN') || dapatkanValueSakti(file, 'PEKERJAAN') || dapatkanValueSakti(file, 'KEGIATAN') || dapatkanValueSakti(file, 'NAMA_JASA') || dapatkanValueSakti(file, 'JASA') || dapatkanValueSakti(file, 'NAMA_DRAFT');
 
-  const isAdmin = userRole === 'admin' || userRole === 'master_admin';
+  // Khusus Master Admin yang dapat mengakses tombol toggle aktif/nonaktif
+  const isMasterAdmin = userRole === 'master_admin';
 
   return (
     <div 
@@ -163,7 +164,7 @@ const ArsipRow = React.memo(({ file, printingId, onCetakLagi, onToggleAktif, onB
           : 'bg-white hover:bg-sky-50/30 border border-sky-100/80 hover:border-sky-300 shadow-xs hover:shadow-lg hover:shadow-sky-100/80 hover:scale-[1.01] hover:-translate-y-0.5'
       }`}
     >
-      <div className={`${isAdmin ? 'col-span-5' : 'col-span-7'} flex items-center gap-3.5`}>
+      <div className={`${isMasterAdmin ? 'col-span-5' : 'col-span-7'} flex items-center gap-3.5`}>
         <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 border transition-colors ${
           isHighlighted ? 'bg-emerald-500 text-white border-emerald-600 shadow-md' : 'bg-gradient-to-br from-sky-100/80 to-blue-50 text-sky-600 border-sky-100 group-hover:scale-110'
         }`}>
@@ -243,7 +244,7 @@ const ArsipRow = React.memo(({ file, printingId, onCetakLagi, onToggleAktif, onB
         )}
       </div>
 
-      {isAdmin && (
+      {isMasterAdmin && (
         <div className="col-span-2 flex items-center justify-center">
           <button
             type="button"
@@ -277,6 +278,9 @@ function ArsipHistory() {
   
   const [activeTab, setActiveTab] = useState('ba_penyerahan'); 
 
+  // STATE SUB-TAB FILTER STATUS (Aktif / Nonaktif / Semua)
+  const [filterStatus, setFilterStatus] = useState('aktif');
+
   const [activeHighlight, setActiveHighlight] = useState(null);
   const highlightedRef = useRef(null);
 
@@ -309,6 +313,7 @@ function ArsipHistory() {
     };
   }, []);
 
+  // INFORMASI AKUN USER & ROLE
   const userRole = useMemo(() => {
     try {
       return localStorage.getItem('role') || JSON.parse(localStorage.getItem('user'))?.role || 'user';
@@ -316,6 +321,37 @@ function ArsipHistory() {
       return 'user';
     }
   }, []);
+
+  const currentUserId = useMemo(() => {
+    try {
+      const userObj = JSON.parse(localStorage.getItem('user'));
+      return userObj?.id || userObj?.user_id || localStorage.getItem('user_id') || null;
+    } catch (e) {
+      return localStorage.getItem('user_id') || null;
+    }
+  }, []);
+
+  // 🔒 ATURAN KETAT ARSIP:
+  // Siapa pun yang login (Pelapor, Penanggung Jawab, Mengetahui, mau pun Master Admin), 
+  // di halaman Arsip HANYA BISA melihat dokumen yang dibuat oleh dirinya sendiri (user_id === currentUserId).
+  // Master Admin memantau seluruh berkas secara terpisah di halaman Monitoring Data.
+  const listSesuaiRole = useMemo(() => {
+    const safeList = Array.isArray(antreanList) ? antreanList : [];
+    if (!currentUserId) return safeList;
+
+    return safeList.filter(item => {
+      const itemUserId = 
+        item.user_id || 
+        item.created_by || 
+        item.id_user || 
+        item.pembuat_id || 
+        item.user?.id ||
+        dapatkanValueSakti(item, 'user_id') ||
+        dapatkanValueSakti(item, 'created_by');
+
+      return String(itemUserId) === String(currentUserId);
+    });
+  }, [antreanList, currentUserId]);
 
   const ambilDataHistory = useCallback(() => {
     const token = localStorage.getItem('token');
@@ -327,7 +363,8 @@ function ArsipHistory() {
       }
     })
     .then(res => {
-      setAntreanList(res.data || []);
+      const dataArr = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      setAntreanList(dataArr);
       setLoading(false);
     })
     .catch(err => {
@@ -340,20 +377,18 @@ function ArsipHistory() {
     ambilDataHistory();
   }, [ambilDataHistory]);
 
-  // 🌟 DUKUNGAN SESSION STORAGE AGAR PENANDA TETAP MENYALA WALAUPUN PINDAH HALAMAN
+  // SESSION STORAGE HIGHLIGHT
   useEffect(() => {
     let rawHighlight = searchParams.get('highlight') || location.state?.highlightId || location.state?.highlight_id || location.state?.id;
     let rawNomor = location.state?.nomorDokumen || location.state?.namaDokumen;
     let targetTabNavigasi = searchParams.get('tab') || location.state?.targetTab || location.state?.activeTab || location.state?.tab || location.state?.kategori;
 
-    // Cek Session Storage jika navigasi kosong (misal berpindah lewat Sidebar)
     if (!rawHighlight && !rawNomor && !targetTabNavigasi) {
       try {
         const savedHighlightStr = sessionStorage.getItem('active_arsip_highlight');
         if (savedHighlightStr) {
           const saved = JSON.parse(savedHighlightStr);
-          // Berlaku selama 10 menit
-          if (saved && (Date.now() - (saved.timestamp || 0) < 600000)) {
+          if (saved && (Date.now() - (saved.timestamp || 0) < 5000)) {
             rawHighlight = saved.highlightId;
             rawNomor = saved.nomorDokumen;
             targetTabNavigasi = saved.targetTab;
@@ -384,42 +419,47 @@ function ArsipHistory() {
       setActiveTab(targetTabNavigasi);
     }
 
-    if (cleanId || rawNomor || targetTabNavigasi) {
+    if (cleanId || rawNomor) {
       setActiveHighlight({
         id: cleanId,
         nomor: rawNomor ? String(rawNomor).trim() : null,
         tab: targetTabNavigasi || null
       });
+
+      const timerHighlight = setTimeout(() => {
+        setActiveHighlight(null);
+        sessionStorage.removeItem('active_arsip_highlight');
+      }, 5000);
+
+      return () => clearTimeout(timerHighlight);
     }
   }, [location, searchParams]);
 
-  // 🌟 ALGORITMA PENCOCOKAN DOKUMEN HIGHLIGHT SANGAT PRESISI
+  // ALGORITMA HIGHLIGHT PRESISI
   const targetHighlightItem = useMemo(() => {
-    if (!activeHighlight || antreanList.length === 0) return null;
+    if (!activeHighlight || listSesuaiRole.length === 0) return null;
 
     const targetId = activeHighlight.id;
     const targetNomor = activeHighlight.nomor ? activeHighlight.nomor.toLowerCase().trim() : '';
     const preferredTab = activeHighlight.tab || activeTab;
 
-    let listDokumenTarget = antreanList;
+    let listDokumenTarget = listSesuaiRole;
     if (preferredTab) {
-      const itemDalamTab = antreanList.filter(f => dapatkanKategoriDokumen(f) === preferredTab);
+      const itemDalamTab = listSesuaiRole.filter(f => dapatkanKategoriDokumen(f) === preferredTab);
       if (itemDalamTab.length > 0) {
         listDokumenTarget = itemDalamTab;
       }
     }
 
     const cariDokumen = (daftar) => {
-      // 1. MATCH EXACT NAMA DOKUMEN (Paling Akurat: "BA Penyerahan - 026/BTG-IX/BA/2026")
       if (targetNomor) {
         const matchExact = daftar.find(f => {
-          const nomDoc = (f.nama_dokumen || f.nomor_dokumen || f.no_dokumen || '').toLowerCase().trim();
+          const nomDoc = String(f.nama_dokumen || f.nomor_dokumen || f.no_dokumen || '').toLowerCase().trim();
           return nomDoc && nomDoc === targetNomor;
         });
         if (matchExact) return matchExact;
       }
 
-      // 2. MATCH BERDASARKAN ID UNIK
       if (targetId) {
         const listKeyID = ['dokumen_id', 'arsip_id', 'id_dokumen', 'id_arsip', 'id', 'id_history', 'history_id', 'id_cetak'];
         
@@ -429,12 +469,11 @@ function ArsipHistory() {
         if (matchById) return matchById;
       }
 
-      // 3. MATCH PARTIAL NOMOR SPESIFIK (Kecuali Kata Kategori Umum)
       if (targetNomor && targetNomor.length > 5) {
         const kataKategoriUmum = ['ba penyerahan', 'ba kerusakan', 'surat tugas', 'tor barang', 'tor jasa'];
         if (!kataKategoriUmum.includes(targetNomor)) {
           const matchPartial = daftar.find(f => {
-            const nomDoc = (f.nama_dokumen || f.nomor_dokumen || f.no_dokumen || '').toLowerCase().trim();
+            const nomDoc = String(f.nama_dokumen || f.nomor_dokumen || f.no_dokumen || '').toLowerCase().trim();
             return nomDoc && (nomDoc.includes(targetNomor) || targetNomor.includes(nomDoc));
           });
           if (matchPartial) return matchPartial;
@@ -445,22 +484,40 @@ function ArsipHistory() {
     };
 
     let hasil = cariDokumen(listDokumenTarget);
-    if (!hasil && listDokumenTarget !== antreanList) {
-      hasil = cariDokumen(antreanList);
+    if (!hasil && listDokumenTarget !== listSesuaiRole) {
+      hasil = cariDokumen(listSesuaiRole);
     }
 
     return hasil;
-  }, [activeHighlight, antreanList, activeTab]);
+  }, [activeHighlight, listSesuaiRole, activeTab]);
 
+  // DETEKSI OTOMATIS: DOKUMEN NONAKTIF
+  const hasNonaktifArsip = useMemo(() => {
+    return listSesuaiRole.some(item => String(item.status_aktif) === '0' || item.status_aktif === 0 || item.status_aktif === false);
+  }, [listSesuaiRole]);
+
+  // HITUNG JUMLAH STATUS UNTUK SUB-TAB BUTTONS
+  const countAktif = useMemo(() => listSesuaiRole.filter(item => String(item.status_aktif) !== '0' && item.status_aktif !== 0 && item.status_aktif !== false).length, [listSesuaiRole]);
+  const countNonaktif = useMemo(() => listSesuaiRole.filter(item => String(item.status_aktif) === '0' || item.status_aktif === 0 || item.status_aktif === false).length, [listSesuaiRole]);
+
+  // FILTERING STATUS AKTIF/NONAKTIF & PENCARIAN
   const dataTerfilter = useMemo(() => {
     const lowerSearch = searchTerm.toLowerCase().trim();
-    if (!lowerSearch) return antreanList;
 
-    return antreanList.filter(item => {
+    return listSesuaiRole.filter(item => {
+      const isAktif = String(item.status_aktif) !== '0' && item.status_aktif !== 0 && item.status_aktif !== false;
+
+      if (hasNonaktifArsip) {
+        if (filterStatus === 'aktif' && !isAktif) return false;
+        if (filterStatus === 'nonaktif' && isAktif) return false;
+      }
+
+      if (!lowerSearch) return true;
+
       const teksGabungan = dapatkanTeksCariPresisi(item);
       return teksGabungan.includes(lowerSearch);
     });
-  }, [antreanList, searchTerm]);
+  }, [listSesuaiRole, searchTerm, filterStatus, hasNonaktifArsip]);
 
   useEffect(() => {
     if (targetHighlightItem) {
@@ -481,7 +538,7 @@ function ArsipHistory() {
   }, [targetHighlightItem, activeTab]);
 
   const handleOpenToggleModal = useCallback((file) => {
-    const isAktif = String(file.status_aktif) === '1' || file.status_aktif === true;
+    const isAktif = String(file.status_aktif) !== '0' && file.status_aktif !== 0 && file.status_aktif !== false;
     setItemToToggle({ id: file.id || file.id_dokumen, isAktif, nama: file.nama_dokumen });
     setIsToggleModalOpen(true);
   }, []);
@@ -577,24 +634,8 @@ function ArsipHistory() {
   }, [dataTerfilter, activeTab]);
 
   const dataDitampilkan = useMemo(() => {
-    const keyword = searchTerm.toLowerCase().trim();
-    
-    if (keyword) {
-      return dataKategori; 
-    }
-
-    let batasData = dataKategori.slice(0, 7);
-
-    if (targetHighlightItem) {
-      const highlightIndex = dataKategori.findIndex(item => cekApakahHighlighted(item, targetHighlightItem));
-      
-      if (highlightIndex >= 7) {
-        batasData = dataKategori.slice(0, highlightIndex + 1);
-      }
-    }
-
-    return batasData;
-  }, [dataKategori, searchTerm, targetHighlightItem]);
+    return dataKategori;
+  }, [dataKategori]);
 
   const bukaModalDetail = useCallback((dokumen) => {
     setDokumenTerpilih(dokumen);
@@ -603,13 +644,14 @@ function ArsipHistory() {
 
   const cekFotoTTD = (item) => {
     if (!item) return null;
-    const namaDokumen = (item.nama_dokumen || '').toLowerCase();
+    const namaDokumen = String(item.nama_dokumen || '').toLowerCase();
     if (namaDokumen.includes('tugas') || namaDokumen.includes('tor')) return null;
 
     return item.foto_ttd || (item.dokumen_cetak && item.dokumen_cetak.foto_ttd) || null;
   };
 
-  const isAdmin = userRole === 'admin' || userRole === 'master_admin';
+  // Pengecekan role khusus master_admin untuk kontrol antarmuka utama
+  const isMasterAdmin = userRole === 'master_admin';
 
   return (
     <div 
@@ -671,9 +713,9 @@ function ArsipHistory() {
                   <path className="animate-check" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"></path>
                 </svg>
               ) : notification.type === 'info' ? (
-                <span className="text-2xl">ℹ️</span>
+                <span className="text-2xl">ℹ</span>
               ) : (
-                <span className="text-2xl">⚠️</span>
+                <span className="text-2xl">⚠</span>
               )}
             </div>
 
@@ -715,42 +757,97 @@ function ArsipHistory() {
             </div>
           </section>
 
-          <section className="bg-white p-2.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50">
+          {/* TOMBOL KATEGORI */}
+          <section className="bg-white p-2.5 rounded-3xl border border-sky-100/80 shadow-sm shadow-sky-100/50 space-y-3">
             <div className="grid grid-cols-5 gap-2 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60 w-full">
               {[
-                { id: 'ba_penyerahan', label: `🤝 BA Penyerahan (${totalPenyerahan})` },
-                { id: 'ba_kerusakan', label: `⚠️ BA Kerusakan (${totalKerusakan})` },
-                { id: 'surat_tugas', label: `💼 Surat Tugas (${totalSuratTugas})` },
-                { id: 'tor_barang', label: `📦 TOR Barang (${totalTorBarang})` },
-                { id: 'tor_jasa', label: `🛠️ TOR Jasa (${totalTorJasa})` }
-              ].map((tab) => (
+                { id: 'ba_penyerahan', label: 'BA Penyerahan', icon: '🤝', count: totalPenyerahan, badgeColor: 'bg-sky-500 text-white' },
+                { id: 'ba_kerusakan', label: 'BA Kerusakan', icon: '⚠️', count: totalKerusakan, badgeColor: 'bg-sky-500 text-white' },
+                { id: 'surat_tugas', label: 'Surat Tugas', icon: '💼', count: totalSuratTugas, badgeColor: 'bg-blue-600 text-white' },
+                { id: 'tor_barang', label: 'TOR Barang', icon: '📦', count: totalTorBarang, badgeColor: 'bg-sky-600 text-white' },
+                { id: 'tor_jasa', label: 'TOR Jasa', icon: '🛠️', count: totalTorJasa, badgeColor: 'bg-blue-700 text-white' }
+              ].map((tab) => {
+                const isActive = activeTab === tab.id;
+
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`py-2.5 px-2 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 relative active:scale-95 ${
+                      isActive 
+                        ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.02]' 
+                        : 'text-slate-500 hover:text-sky-600 hover:bg-sky-50/60'
+                    }`}
+                  >
+                    <span className="truncate">{tab.icon} {tab.label}</span>
+
+                    {tab.count > 0 && (
+                      <span className="relative flex h-4 w-4 items-center justify-center flex-shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                        <span className={`relative inline-flex rounded-full h-4 w-4 ${isActive ? 'bg-white text-blue-600' : tab.badgeColor} text-[10px] font-black items-center justify-center shadow-xs`}>
+                          {tab.count}
+                        </span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* SUB-TAB FILTER STATUS DOKUMEN */}
+            {hasNonaktifArsip && (
+              <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-2xl w-fit text-xs font-bold border border-slate-200/60">
                 <button
-                  key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`py-2.5 text-xs font-extrabold rounded-xl transition-all duration-300 cursor-pointer text-center truncate active:scale-95 ${
-                    activeTab === tab.id 
-                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-200/60 scale-[1.02]' 
-                      : 'text-slate-400 hover:text-sky-600 hover:bg-sky-50/60'
+                  onClick={() => setFilterStatus('aktif')}
+                  className={`px-4 py-1.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                    filterStatus === 'aktif'
+                      ? 'bg-emerald-500 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-800'
                   }`}
                 >
-                  {tab.label}
+                  🟢 Dokumen Aktif ({countAktif})
                 </button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setFilterStatus('nonaktif')}
+                  className={`px-4 py-1.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                    filterStatus === 'nonaktif'
+                      ? 'bg-rose-500 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  🔴 Dokumen Nonaktif ({countNonaktif})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterStatus('semua')}
+                  className={`px-4 py-1.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                    filterStatus === 'semua'
+                      ? 'bg-sky-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  📋 Semua ({listSesuaiRole.length})
+                </button>
+              </div>
+            )}
           </section>
 
           {dataDitampilkan.length === 0 ? (
             <div className="bg-white rounded-3xl border border-sky-100/80 p-20 text-center space-y-3 shadow-sm shadow-sky-100/50">
               <div className="text-4xl select-none">📭</div>
-              <p className="text-slate-500 font-bold text-sm">Tidak ada dokumen yang ditemukan</p>
+              <p className="text-slate-500 font-bold text-sm">
+                Tidak ada dokumen {hasNonaktifArsip && filterStatus !== 'semua' ? filterStatus : ''} yang ditemukan
+              </p>
             </div>
           ) : (
             <div className="bg-white rounded-3xl border border-sky-200/80 shadow-md shadow-sky-100/60 p-3 space-y-2">
               <div className="grid grid-cols-12 px-6 py-3 bg-[#F4F8FC] rounded-2xl text-[10px] font-extrabold text-sky-600 uppercase tracking-wider">
-                <div className={isAdmin ? "col-span-5" : "col-span-7"}>Detail Nama Berkas</div>
+                <div className={isMasterAdmin ? "col-span-5" : "col-span-7"}>Detail Nama Berkas</div>
                 <div className="col-span-5 text-center">Konfigurasi & Cetak Fisik</div>
-                {isAdmin && (
+                {isMasterAdmin && (
                   <div className="col-span-2 text-center">Aksi</div>
                 )}
               </div>

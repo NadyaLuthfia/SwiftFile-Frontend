@@ -20,6 +20,9 @@ function DraftKerusakan() {
   const [loadingFetch, setLoadingFetch] = useState(true);
   const [loadingDraft, setLoadingDraft] = useState(false); 
   const [loadingSelesai, setLoadingSelesai] = useState(false); 
+
+  // State Pop-up Konfirmasi Peran
+  const [showRoleModal, setShowRoleModal] = useState(false);
   
   // State penyimpan ID pembuat asli, ID Penanggung, dan ID User Login
   const [creatorId, setCreatorId] = useState(null);
@@ -51,7 +54,8 @@ function DraftKerusakan() {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     .then(res => {
-      setKaryawanList(res.data.data || []);
+      const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      setKaryawanList(list);
     })
     .catch(err => console.error("Gagal memuat data karyawan:", err));
   }, []);
@@ -128,12 +132,12 @@ function DraftKerusakan() {
       }
     })
       .then(res => {
-        const listVariabel = res.data.variables || []; 
-        const namaTemplate = res.data.nama || `Dokumen Template #${idTemplate}`;
+        const listVariabel = res.data.variables || res.data.data?.variables || []; 
+        const namaTemplate = res.data.nama || res.data.data?.nama || `Dokumen Template #${idTemplate}`;
         
         setFields(listVariabel);
         setTemplateInfo({ nama: namaTemplate });
-        setTextContent(res.data.text_content || ''); 
+        setTextContent(res.data.text_content || res.data.data?.text_content || ''); 
 
         if (dataLama) {
           const cleanedData = { ...dataLama };
@@ -171,7 +175,7 @@ function DraftKerusakan() {
           }
           
           const nomorEksis = cleanedData.no || '';
-          const matchCounter = nomorEksis.match(/^(\d+)/);
+          const matchCounter = String(nomorEksis).match(/^(\d+)/);
           if (matchCounter) {
             setNextCounter(parseInt(matchCounter[1], 10));
           }
@@ -261,7 +265,7 @@ function DraftKerusakan() {
       }
     })
       .then(res => {
-        const draftData = res.data.data;
+        const draftData = res.data.data || res.data;
         setNamaDraft(draftData.nama_draft);
         setCurrentTemplateId(draftData.template_id);
         
@@ -273,7 +277,7 @@ function DraftKerusakan() {
 
         let dataInputSebelumnya = draftData.data_input;
         if (typeof dataInputSebelumnya === 'string') {
-          dataInputSebelumnya = JSON.parse(dataInputSebelumnya);
+          try { dataInputSebelumnya = JSON.parse(dataInputSebelumnya); } catch (e) {}
         }
 
         ambilVariabelTemplate(draftData.template_id, dataInputSebelumnya);
@@ -336,9 +340,9 @@ function DraftKerusakan() {
     setFormData(prev => ({ ...prev, [name]: value }));
 
     const saringKaryawan = (val) => {
-      if (val.trim() === '') return [];
+      if (!val || val.trim() === '') return [];
       return karyawanList.filter(k =>
-        k.nama_lengkap.toLowerCase().includes(val.toLowerCase())
+        k && String(k.nama_lengkap || k.nama || '').toLowerCase().includes(val.toLowerCase())
       );
     };
 
@@ -379,8 +383,10 @@ function DraftKerusakan() {
   };
 
   const pilihKaryawan = (karyawan, tipeVariable) => {
+    if (!karyawan) return;
+    const namaKaryawan = karyawan.nama_lengkap || karyawan.nama || '';
     setFormData(prev => {
-      const newFormData = { ...prev, [tipeVariable]: karyawan.nama_lengkap };
+      const newFormData = { ...prev, [tipeVariable]: namaKaryawan };
       
       if (tipeVariable === 'nama_laporan') {
         newFormData['bidang_laporan'] = 
@@ -460,7 +466,7 @@ function DraftKerusakan() {
         item = '';
       }
 
-      if (!(item instanceof File) && key !== 'foto') {
+      if (!(item instanceof File) && key !== 'foto' && !key.startsWith('foto_')) {
         if (key === 'bulan' && !isCetakLangsung) {
           const romawiMap = {
             'Januari': 'I', 'Februari': 'II', 'Maret': 'III', 'April': 'IV', 'Mei': 'V', 'Juni': 'VI',
@@ -480,7 +486,7 @@ function DraftKerusakan() {
   };
 
   const handleSaveDraft = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setLoadingDraft(true);
     const token = localStorage.getItem('token');
 
@@ -520,8 +526,15 @@ function DraftKerusakan() {
     });
   };
 
-  const handleSelesai = async (e) => {
+  // Memicu Modal Konfirmasi Peran Sebelum Mengirim
+  const triggerSelesaiCheck = (e) => {
     e.preventDefault();
+    setShowRoleModal(true);
+  };
+
+  // Eksekusi Asli Selesai Kirim Setelah Pengguna Menekan "Lanjutkan"
+  const eksekusiSelesaiKirim = async () => {
+    setShowRoleModal(false);
     setLoadingSelesai(true);
     const token = localStorage.getItem('token');
 
@@ -678,7 +691,7 @@ function DraftKerusakan() {
               
               {/* PANEL KIRI FORM */}
               <div className="lg:col-span-7">
-                <form onSubmit={handleSelesai} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
+                <form onSubmit={triggerSelesaiCheck} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                   
                   <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-sky-950 font-medium">
                     <span>🤖</span>
@@ -789,9 +802,9 @@ function DraftKerusakan() {
                             {/* DROPDOWN AUTOCOMPLETE */}
                             {!isFieldDisabled && isLaporan && showLaporanDropdown && filteredLaporan.length > 0 && (
                               <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
-                                {filteredLaporan.map(k => (
-                                  <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_laporan')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
-                                    {k.nama_lengkap} <span className="text-[10px] text-slate-400 font-normal">({k.jabatan?.nama_jabatan})</span>
+                                {filteredLaporan.map((k, idx) => (
+                                  <button key={k.id || `lap-${idx}`} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_laporan')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
+                                    {k.nama_lengkap || k.nama} <span className="text-[10px] text-slate-400 font-normal">({k.jabatan?.nama_jabatan || k.jabatan || '-'})</span>
                                   </button>
                                 ))}
                               </div>
@@ -799,9 +812,9 @@ function DraftKerusakan() {
 
                             {!isFieldDisabled && isPenanggung && showPenanggungDropdown && filteredPenanggung.length > 0 && (
                               <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
-                                {filteredPenanggung.map(k => (
-                                  <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_penanggung')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
-                                    {k.nama_lengkap} <span className="text-[10px] text-slate-400 font-normal">({k.jabatan?.nama_jabatan})</span>
+                                {filteredPenanggung.map((k, idx) => (
+                                  <button key={k.id || `pen-${idx}`} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_penanggung')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
+                                    {k.nama_lengkap || k.nama} <span className="text-[10px] text-slate-400 font-normal">({k.jabatan?.nama_jabatan || k.jabatan || '-'})</span>
                                   </button>
                                 ))}
                               </div>
@@ -809,9 +822,9 @@ function DraftKerusakan() {
 
                             {!isFieldDisabled && isPengetahui && showPengetahuiDropdown && filteredPengetahui.length > 0 && (
                               <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1">
-                                {filteredPengetahui.map(k => (
-                                  <button key={k.id} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_pengetahui')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
-                                    {k.nama_lengkap} <span className="text-[10px] text-slate-400 font-normal">({k.jabatan?.nama_jabatan})</span>
+                                {filteredPengetahui.map((k, idx) => (
+                                  <button key={k.id || `tahu-${idx}`} type="button" onMouseDown={() => pilihKaryawan(k, 'nama_pengetahui')} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-all">
+                                    {k.nama_lengkap || k.nama} <span className="text-[10px] text-slate-400 font-normal">({k.jabatan?.nama_jabatan || k.jabatan || '-'})</span>
                                   </button>
                                 ))}
                               </div>
@@ -955,6 +968,60 @@ function DraftKerusakan() {
           )}
         </div>
       </main>
+
+      {/* MODAL POPUP KONFIRMASI PERAN PELAPOR */}
+      {showRoleModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-all duration-300 animate-fadeIn">
+          <div className="bg-white rounded-[32px] p-8 max-w-md w-full shadow-2xl border border-slate-100 space-y-6 transform transition-all duration-300 scale-100">
+            
+            {/* Header Modal */}
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-amber-100/80 border border-amber-200/60 flex items-center justify-center text-2xl shrink-0">
+                ⚠️
+              </div>
+              <div className="space-y-0.5">
+                <h3 className="text-lg font-black text-slate-800 tracking-tight">Konfirmasi Pembuat Berkas</h3>
+                <p className="text-xs text-slate-400 font-medium">Verifikasi peran pengguna sebelum melanjutkan</p>
+              </div>
+            </div>
+
+            {/* Konten Utama */}
+            <div className="bg-[#F0F5FA] rounded-2xl p-5 space-y-4">
+              <p className="font-extrabold text-slate-800 text-xs sm:text-sm">Apakah Anda seorang Pembuat File / Pelapor?</p>
+              
+              <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 text-xs space-y-2">
+                <p className="font-bold flex items-center gap-1.5 text-amber-900">
+                  <span>📌</span> Catatan Penting:
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-[11px] leading-relaxed text-amber-800">
+                  <li>Tekan <strong className="underline">"Lanjutkan"</strong> jika Anda adalah <u>Pembuat File / Pelapor</u>.</li>
+                  <li><strong className="text-amber-900">Jangan tekan "Lanjutkan"</strong> jika Anda adalah <u>Penanggung Jawab</u>. Tekan <strong className="underline">"Batal"</strong>.</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Tombol Aksi Modal */}
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowRoleModal(false)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-7 py-3 rounded-full text-xs transition-all duration-200 cursor-pointer transform hover:scale-105 active:scale-95"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={eksekusiSelesaiKirim}
+                className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold px-8 py-3 rounded-full text-xs transition-all duration-200 shadow-md shadow-blue-500/30 cursor-pointer transform hover:scale-105 active:scale-95"
+              >
+                Lanjutkan
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

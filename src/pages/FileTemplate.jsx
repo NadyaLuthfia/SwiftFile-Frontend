@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar'; 
 import axios from 'axios';
@@ -11,6 +11,9 @@ function FileTemplate() {
   // 👑 Ambil role user dari localStorage
   const userRole = localStorage.getItem('role');
 
+  // 🌟 STATE UNTUK SUB-TAB FILTER STATUS TEMPLATE (Aktif / Nonaktif / Semua)
+  const [filterStatus, setFilterStatus] = useState('aktif');
+
   // STATE UNTUK FITUR UPLOAD MODAL
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [namaTemplate, setNamaTemplate] = useState('');
@@ -18,10 +21,10 @@ function FileTemplate() {
   const [fileTemplate, setFileTemplate] = useState(null);
   const [loadingUpload, setLoadingUpload] = useState(false);
 
-  // STATE UNTUK MODAL HAPUS
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState(null); // { id, nama }
-  const [loadingDelete, setLoadingDelete] = useState(false);
+  // STATE UNTUK MODAL TOGGLE STATUS (NONAKTIFKAN / AKTIFKAN)
+  const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
+  const [itemToToggle, setItemToToggle] = useState(null); // { id, nama, isAktif }
+  const [loadingToggle, setLoadingToggle] = useState(false);
 
   // 🌟 STATE POP-UP MODAL REACT (NOTIFIKASI SUKSES & ERROR/WARNING)
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
@@ -126,40 +129,95 @@ function FileTemplate() {
     }
   };
 
-  // FUNGSI BUKA MODAL CONFIRM HAPUS
-  const handleOpenDeleteModal = (id, nama) => {
-    setItemToDelete({ id, nama });
-    setIsDeleteModalOpen(true);
+  // FUNGSI BUKA MODAL CONFIRM TOGGLE STATUS
+  const handleOpenToggleModal = (id, nama, statusAktif) => {
+    const isAktif = String(statusAktif) !== '0' && statusAktif !== 0 && statusAktif !== false;
+    setItemToToggle({ id, nama, isAktif });
+    setIsToggleModalOpen(true);
   };
 
-  // FUNGSI EKSEKUSI HAPUS DARI MODAL
-  const executeHapus = async () => {
-    if (!itemToDelete) return;
-    setLoadingDelete(true);
+  // FUNGSI EKSEKUSI UBAH STATUS (LEBIH FLEKSIBEL DENGAN FALLBACK ENDPOINT)
+  const executeToggleStatus = async () => {
+    if (!itemToToggle) return;
+    setLoadingToggle(true);
 
     const token = localStorage.getItem('token');
+    const targetStatus = itemToToggle.isAktif ? 0 : 1;
 
     try {
-      await axios.delete(`http://localhost:8000/api/templates/${itemToDelete.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
+      // 1. Coba Endpoint khusus toggle status
+      try {
+        await axios.post(`http://localhost:8000/api/templates/${itemToToggle.id}/toggle-status`, {}, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          }
+        });
+      } catch (e1) {
+        // 2. Fallback jika backend menggunakan PUT / PATCH standar
+        try {
+          await axios.put(`http://localhost:8000/api/templates/${itemToToggle.id}`, { status_aktif: targetStatus }, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            }
+          });
+        } catch (e2) {
+          // 3. Fallback jika backend membutuhkan POST dengan _method: PUT
+          await axios.post(`http://localhost:8000/api/templates/${itemToToggle.id}`, {
+            status_aktif: targetStatus,
+            _method: 'PUT'
+          }, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            }
+          });
         }
-      });
+      }
 
-      setIsDeleteModalOpen(false);
-      setItemToDelete(null);
+      setIsToggleModalOpen(false);
+      setItemToToggle(null);
 
-      triggerSuccessModal('Template Terhapus!', 'Template berhasil dihapus dari sistem.');
+      triggerSuccessModal(
+        'Status Diperbarui!', 
+        `Template berhasil ${itemToToggle.isAktif ? 'dinonaktifkan' : 'diaktifkan kembali'}.`
+      );
       ambilDataTemplate();
     } catch (err) {
-      console.error("Gagal menghapus:", err);
-      setIsDeleteModalOpen(false);
-      triggerErrorModal('Gagal Hapus', 'Terjadi kesalahan saat menghapus template.');
+      console.error("Gagal mengubah status template:", err);
+      setIsToggleModalOpen(false);
+      triggerErrorModal('Gagal Ubah Status', 'Terjadi kesalahan saat memperbarui status template.');
     } finally {
-      setLoadingDelete(false);
+      setLoadingToggle(false);
     }
   };
+
+  // 🌟 CEK APAKAH ADA MINIMAL 1 TEMPLATE YANG NONAKTIF
+  const hasNonaktifTemplates = useMemo(() => {
+    return templates.some(t => String(t.status_aktif) === '0' || t.status_aktif === 0 || t.status_aktif === false);
+  }, [templates]);
+
+  // HITUNG JUMLAH TEMPLATE AKTIF DAN NONAKTIF
+  const countAktif = useMemo(() => {
+    return templates.filter(t => String(t.status_aktif) !== '0' && t.status_aktif !== 0 && t.status_aktif !== false).length;
+  }, [templates]);
+
+  const countNonaktif = useMemo(() => {
+    return templates.filter(t => String(t.status_aktif) === '0' || t.status_aktif === 0 || t.status_aktif === false).length;
+  }, [templates]);
+
+  // FILTERING LIST TEMPLATE BERDASARKAN STATUS
+  const filteredTemplates = useMemo(() => {
+    return templates.filter(t => {
+      const isAktif = String(t.status_aktif) !== '0' && t.status_aktif !== 0 && t.status_aktif !== false;
+      
+      if (!hasNonaktifTemplates) return true;
+      if (filterStatus === 'aktif') return isAktif;
+      if (filterStatus === 'nonaktif') return !isAktif;
+      return true;
+    });
+  }, [templates, filterStatus, hasNonaktifTemplates]);
 
   const formatTanggal = (dateString) => {
     if (!dateString) return '-';
@@ -207,7 +265,7 @@ function FileTemplate() {
       <Sidebar />
 
       <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full custom-scrollbar">
-        <div className="w-full max-w-6xl mx-auto space-y-8">
+        <div className="w-full max-w-6xl mx-auto space-y-6">
           
           {/* Header Atas */}
           <header className="flex justify-between items-center">
@@ -236,6 +294,45 @@ function FileTemplate() {
             )}
           </header>
 
+          {/* 🌟 SUB-TAB FILTER STATUS (HANYA MUNCUL JIKA ADA MINIMAL 1 FILE NONAKTIF) */}
+          {hasNonaktifTemplates && (
+            <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-2xl w-fit text-xs font-bold border border-slate-200/80">
+              <button
+                type="button"
+                onClick={() => setFilterStatus('aktif')}
+                className={`px-4 py-1.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                  filterStatus === 'aktif'
+                    ? 'bg-emerald-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                🟢 Template Aktif ({countAktif})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterStatus('nonaktif')}
+                className={`px-4 py-1.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                  filterStatus === 'nonaktif'
+                    ? 'bg-rose-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                🔴 Template Nonaktif ({countNonaktif})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterStatus('semua')}
+                className={`px-4 py-1.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                  filterStatus === 'semua'
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                📋 Semua ({templates.length})
+              </button>
+            </div>
+          )}
+
           {/* KONDISI RENDER UTAMA */}
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -248,106 +345,136 @@ function FileTemplate() {
                 </div>
               ))}
             </div>
-          ) : templates.length === 0 ? (
+          ) : filteredTemplates.length === 0 ? (
             <div className="bg-white rounded-3xl border border-sky-100/80 py-20 text-center space-y-3 shadow-xs">
               <div className="text-5xl select-none">📭</div>
-              <p className="text-slate-500 font-bold text-sm">Belum ada file template di database.</p>
+              <p className="text-slate-500 font-bold text-sm">Belum ada file template {filterStatus !== 'semua' ? filterStatus : ''} di database.</p>
               <p className="text-slate-400 font-medium text-xs">Silakan tekan tombol 'Tambah Template' di atas untuk mengunggah berkas baru.</p>
             </div>
           ) : (
             
             /* TAMPILAN GRID CARD VIEW */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {templates.map((t) => (
-                <div 
-                  key={t.id} 
-                  className="bg-gradient-to-bl from-sky-100/70 via-sky-50/20 to-white rounded-3xl border border-sky-200/80 p-6 shadow-md shadow-sky-100/60 hover:border-sky-300 hover:shadow-xl hover:shadow-sky-200/60 transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between group relative overflow-hidden cursor-default"
-                >
-                  <div className="absolute -top-6 -right-6 w-48 h-48 bg-gradient-to-bl from-sky-200/50 via-blue-100/30 to-transparent rounded-full blur-xl pointer-events-none transition-all duration-500 group-hover:scale-125 group-hover:from-sky-300/60" />
+              {filteredTemplates.map((t) => {
+                const isAktif = String(t.status_aktif) !== '0' && t.status_aktif !== 0 && t.status_aktif !== false;
 
-                  <div className="relative z-10">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="bg-gradient-to-br from-sky-100/80 to-blue-50 text-sky-600 w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold shadow-xs border border-sky-100/80 transition-all duration-300 group-hover:scale-105 group-hover:shadow-lg group-hover:shadow-sky-200/80 group-hover:from-sky-200/80 group-hover:to-blue-100/80">
-                        📄
+                return (
+                  <div 
+                    key={t.id} 
+                    className={`rounded-3xl border p-6 shadow-md transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between group relative overflow-hidden cursor-default ${
+                      isAktif 
+                        ? 'bg-gradient-to-bl from-sky-100/70 via-sky-50/20 to-white border-sky-200/80 shadow-sky-100/60 hover:border-sky-300 hover:shadow-xl hover:shadow-sky-200/60' 
+                        : 'bg-slate-50/90 border-slate-200/80 shadow-slate-100/40 opacity-90'
+                    }`}
+                  >
+                    <div className="absolute -top-6 -right-6 w-48 h-48 bg-gradient-to-bl from-sky-200/50 via-blue-100/30 to-transparent rounded-full blur-xl pointer-events-none transition-all duration-500 group-hover:scale-125 group-hover:from-sky-300/60" />
+
+                    <div className="relative z-10">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="bg-gradient-to-br from-sky-100/80 to-blue-50 text-sky-600 w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold shadow-xs border border-sky-100/80 transition-all duration-300 group-hover:scale-105 group-hover:shadow-lg group-hover:shadow-sky-200/80 group-hover:from-sky-200/80 group-hover:to-blue-100/80">
+                          📄
+                        </div>
+                        
+                        <div className="flex flex-col items-end gap-1">
+                          {/* BADGE CATEGORY */}
+                          <span className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold uppercase tracking-wide border shadow-2xs bg-sky-100/80 text-sky-700 border-sky-200/60">
+                            {t.jenis_dokumen_id === 2 
+                              ? '⚠️ Kerusakan' 
+                              : t.jenis_dokumen_id === 3 
+                              ? '💼 Surat Tugas' 
+                              : t.jenis_dokumen_id === 4 
+                              ? '📋 TOR Barang' 
+                              : t.jenis_dokumen_id === 5
+                              ? '📓 TOR Jasa' 
+                              : '🤝 Penyerahan'}
+                          </span>
+
+                          {!isAktif && (
+                            <span className="px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase bg-rose-100 text-rose-700 border border-rose-200">
+                              🚫 Nonaktif
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      
-                      {/* BADGE CATEGORY */}
-                      <span className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold uppercase tracking-wide border shadow-2xs bg-sky-100/80 text-sky-700 border-sky-200/60">
-                        {t.jenis_dokumen_id === 2 
-                          ? '⚠️ Kerusakan' 
-                          : t.jenis_dokumen_id === 3 
-                          ? '💼 Surat Tugas' 
-                          : t.jenis_dokumen_id === 4 
-                          ? '📋 TOR Barang' 
-                          : t.jenis_dokumen_id === 5
-                          ? '📓 TOR Jasa' 
-                          : '🤝 Penyerahan'}
-                      </span>
+
+                      <h3 className="font-bold text-slate-800 group-hover:text-sky-600 transition-colors line-clamp-2 text-sm leading-snug min-h-[40px]">
+                        {t.nama}
+                      </h3>
+
+                      <div className="text-[11px] text-slate-400 font-medium mt-2 mb-6 flex items-center gap-1.5">
+                        <span>🕒 Diperbarui:</span>
+                        <span className="font-bold text-slate-600">{formatTanggal(t.updated_at || t.created_at)}</span>
+                      </div>
                     </div>
 
-                    <h3 className="font-bold text-slate-800 group-hover:text-sky-600 transition-colors line-clamp-2 text-sm leading-snug min-h-[40px]">
-                      {t.nama}
-                    </h3>
+                    <div className={`relative z-10 grid ${userRole === 'master_admin' ? 'grid-cols-2' : 'grid-cols-1'} gap-2.5 pt-4 border-t border-sky-100/60`}>
+                      {isAktif ? (
+                        <button 
+                          onClick={() => {
+                            if (t.jenis_dokumen_id === 2) {
+                              navigate(`/draft-kerusakan?template_id=${t.id}`);
+                            } else if (t.jenis_dokumen_id === 3) {
+                              navigate(`/draft-surat-tugas?template_id=${t.id}`);
+                            } else if (t.jenis_dokumen_id === 4) {
+                              navigate(`/draft-tor-barang?template_id=${t.id}`);
+                            } else if (t.jenis_dokumen_id === 5) {
+                              navigate(`/draft-tor-jasa?template_id=${t.id}`);
+                            } else {
+                              navigate(`/draft-penyerahan?template_id=${t.id}`);
+                            }
+                          }} 
+                          className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent py-2.5 rounded-xl text-[11px] font-bold transition-all shadow-2xs flex items-center justify-center gap-1 cursor-pointer w-full active:scale-95"
+                          title="Pilih template ini untuk membuat dokumen"
+                        >
+                          Pilih
+                        </button>
+                      ) : (
+                        <span className="bg-slate-100 text-slate-400 border border-slate-200 py-2.5 rounded-xl text-[11px] font-bold text-center block w-full select-none cursor-not-allowed">
+                          Nonaktif
+                        </span>
+                      )}
 
-                    <div className="text-[11px] text-slate-400 font-medium mt-2 mb-6 flex items-center gap-1.5">
-                      <span>🕒 Diperbarui:</span>
-                      <span className="font-bold text-slate-600">{formatTanggal(t.updated_at || t.created_at)}</span>
+                      {userRole === 'master_admin' && (
+                        <button 
+                          onClick={() => handleOpenToggleModal(t.id, t.nama, t.status_aktif)}
+                          className={`py-2.5 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer active:scale-95 ${
+                            isAktif 
+                              ? 'bg-rose-50/80 hover:bg-rose-500 text-rose-500 hover:text-white border-rose-100 hover:border-transparent' 
+                              : 'bg-emerald-50/80 hover:bg-emerald-600 text-emerald-600 hover:text-white border-emerald-100 hover:border-transparent'
+                          }`}
+                        >
+                          {isAktif ? 'Nonaktifkan' : 'Aktifkan'}
+                        </button>
+                      )}
                     </div>
                   </div>
-
-                  <div className={`relative z-10 grid ${userRole === 'master_admin' ? 'grid-cols-2' : 'grid-cols-1'} gap-2.5 pt-4 border-t border-sky-100/60`}>
-                    <button 
-                      onClick={() => {
-                        if (t.jenis_dokumen_id === 2) {
-                          navigate(`/draft-kerusakan?template_id=${t.id}`);
-                        } else if (t.jenis_dokumen_id === 3) {
-                          navigate(`/draft-surat-tugas?template_id=${t.id}`);
-                        } else if (t.jenis_dokumen_id === 4) {
-                          navigate(`/draft-tor-barang?template_id=${t.id}`);
-                        } else if (t.jenis_dokumen_id === 5) {
-                          navigate(`/draft-tor-jasa?template_id=${t.id}`);
-                        } else {
-                          navigate(`/draft-penyerahan?template_id=${t.id}`);
-                        }
-                      }} 
-                      className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent py-2.5 rounded-xl text-[11px] font-bold transition-all shadow-2xs flex items-center justify-center gap-1 cursor-pointer w-full active:scale-95"
-                      title="Pilih template ini untuk membuat dokumen"
-                    >
-                      Pilih
-                    </button>
-
-                    {userRole === 'master_admin' && (
-                      <button 
-                        onClick={() => handleOpenDeleteModal(t.id, t.nama)}
-                        className="bg-rose-50/80 hover:bg-rose-500 text-rose-500 hover:text-white py-2.5 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 border border-rose-100 hover:border-transparent cursor-pointer active:scale-95"
-                      >
-                        Hapus
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       </main>
 
-      {/* 🌟 1. POP-UP MODAL KONFIRMASI HAPUS TEMPLATE (KONSISTEN 1:1) */}
-      {isDeleteModalOpen && (
+      {/* 🌟 1. POP-UP MODAL KONFIRMASI TOGGLE STATUS (NONAKTIFKAN / AKTIFKAN) */}
+      {isToggleModalOpen && itemToToggle && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 transition-all">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-sky-100 w-[340px] p-6 text-center space-y-4 animate-pop relative">
             
-            <div className="w-14 h-14 bg-amber-100/80 text-amber-500 rounded-2xl flex items-center justify-center text-2xl mx-auto border border-amber-200/60 shadow-xs">
-              ⚠️
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mx-auto border shadow-xs ${
+              itemToToggle.isAktif 
+                ? 'bg-amber-100/80 text-amber-500 border-amber-200/60' 
+                : 'bg-emerald-100/80 text-emerald-600 border-emerald-200/60'
+            }`}>
+              {itemToToggle.isAktif ? '🚫' : '✓'}
             </div>
 
             <div className="space-y-1.5">
               <h3 className="text-base font-extrabold text-slate-800 tracking-tight">
-                Hapus Template?
+                {itemToToggle.isAktif ? 'Nonaktifkan Template?' : 'Aktifkan Kembali?'}
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                Apakah Anda yakin ingin menghapus <br />
-                <span className="font-bold text-slate-700">"{itemToDelete?.nama}"</span>?
+                Apakah Anda yakin ingin {itemToToggle.isAktif ? 'menonaktifkan' : 'mengaktifkan kembali'} <br />
+                <span className="font-bold text-slate-700">"{itemToToggle.nama}"</span>?
               </p>
             </div>
 
@@ -355,8 +482,8 @@ function FileTemplate() {
               <button
                 type="button"
                 onClick={() => {
-                  setIsDeleteModalOpen(false);
-                  setItemToDelete(null);
+                  setIsToggleModalOpen(false);
+                  setItemToToggle(null);
                 }}
                 className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-2xl text-xs transition-all active:scale-95 cursor-pointer"
               >
@@ -365,11 +492,15 @@ function FileTemplate() {
 
               <button
                 type="button"
-                onClick={executeHapus}
-                disabled={loadingDelete}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-2xl text-xs shadow-md shadow-red-200 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                onClick={executeToggleStatus}
+                disabled={loadingToggle}
+                className={`flex-1 text-white font-bold py-2.5 rounded-2xl text-xs shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 ${
+                  itemToToggle.isAktif 
+                    ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200' 
+                    : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
+                }`}
               >
-                {loadingDelete ? "Menghapus..." : "Ya, Hapus"}
+                {loadingToggle ? "Memproses..." : itemToToggle.isAktif ? "Ya, Nonaktifkan" : "Ya, Aktifkan"}
               </button>
             </div>
           </div>

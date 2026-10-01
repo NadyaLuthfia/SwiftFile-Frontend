@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 
 function Login() {
   const [username, setUsername] = useState('');
@@ -6,29 +6,22 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // 🔔 State Notifikasi & Timer Ref
+  // 🔔 State Notifikasi
   const [notification, setNotification] = useState({
     show: false,
     message: '',
     type: 'success' // 'success' | 'error' | 'info'
   });
-  const toastTimerRef = useRef(null);
 
-  // 💡 Fungsi Bantuan Notifikasi (Otomatis Tutup 2 Detik)
+  // 💡 Fungsi Menampilkan Notifikasi (Tanpa Auto-Close Timer)
   const showToast = (message, type = 'error') => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    
     setNotification({ show: true, message: String(message), type });
-    toastTimerRef.current = setTimeout(() => {
-      setNotification({ show: false, message: '', type: 'success' });
-    }, 2000);
   };
 
-  useEffect(() => {
-    return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    };
-  }, []);
+  // 💡 Fungsi Menutup Notifikasi Saat Klik "OK"
+  const closeToast = () => {
+    setNotification({ show: false, message: '', type: 'success' });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -56,7 +49,7 @@ function Login() {
 
         const role = data.user.role;
         
-        // ✨ NOTIFIKASI SUKSES (DIPERBARUI)
+        // ✨ NOTIFIKASI SUKSES
         showToast('Login berhasil. Sedang mengalihkan...', 'success');
         
         setTimeout(() => {
@@ -69,15 +62,15 @@ function Login() {
           else {
             window.location.href = '/dashboard'; 
           }
-        }, 1000);
+        }, 1200);
 
       } else {
-        // ✨ NOTIFIKASI GAGAL LOGIN (DIPERBARUI)
+        // ✨ NOTIFIKASI GAGAL LOGIN
         showToast(data.message || 'Login gagal. Pastikan username dan kata sandi yang Anda masukkan benar.', 'error');
       }
     } catch (error) {
       console.error('Kesalahan koneksi:', error);
-      // ✨ NOTIFIKASI ERROR SERVER (DIPERBARUI)
+      // ✨ NOTIFIKASI ERROR SERVER
       showToast('Koneksi ke server gagal. Silakan hubungi tim IT atau coba beberapa saat lagi.', 'error');
     } finally {
       setLoading(false);
@@ -112,10 +105,10 @@ function Login() {
         }
       `}</style>
 
-      {/* 🌟 MODAL NOTIFIKASI */}
+      {/* 🌟 MODAL NOTIFIKASI DENGAN TOMBOL OK MERAH */}
       {notification.show && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-[9999] flex items-center justify-center p-4 transition-all">
-          <div className="bg-white rounded-[2rem] shadow-2xl border border-sky-100 w-[340px] p-6 text-center space-y-4 animate-pop relative">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-sky-100 w-[340px] p-6 text-center space-y-5 animate-pop relative">
             
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto border shadow-xs ${
               notification.type === 'success' 
@@ -135,7 +128,7 @@ function Login() {
               )}
             </div>
 
-            <div className="space-y-1.5 pb-2">
+            <div className="space-y-1.5">
               <h3 className="text-base font-extrabold text-slate-800 tracking-tight">
                 {notification.type === 'success' ? 'Berhasil' : notification.type === 'info' ? 'Informasi' : 'Peringatan'}
               </h3>
@@ -143,6 +136,18 @@ function Login() {
                 {notification.message}
               </p>
             </div>
+
+            {/* 🔘 TOMBOL OK WARNA MERAH */}
+            {notification.type !== 'success' && (
+              <button
+                type="button"
+                onClick={closeToast}
+                className="w-full py-2.5 px-4 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md shadow-rose-200 transition-all duration-200 active:scale-95 cursor-pointer"
+              >
+                OK
+              </button>
+            )}
+
           </div>
         </div>
       )}

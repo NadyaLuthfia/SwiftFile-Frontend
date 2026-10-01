@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Sidebar from './Sidebar';
 import axios from 'axios';
 
@@ -12,6 +12,11 @@ function ManagementData() {
 
   // State Navigasi Tab
   const [activeTab, setActiveTab] = useState('karyawan');
+
+  // State Filter Status (Aktif / Nonaktif / Semua)
+  const [filterStatusKaryawan, setFilterStatusKaryawan] = useState('aktif');
+  const [filterStatusJabatan, setFilterStatusJabatan] = useState('aktif');
+  const [filterStatusBidang, setFilterStatusBidang] = useState('aktif');
 
   // State Pencarian Global
   const [searchTerm, setSearchTerm] = useState('');
@@ -121,7 +126,6 @@ function ManagementData() {
     }).then(() => {
       setInputJabatan('');
       muatSemuaData();
-      showToast('Jabatan baru berhasil ditambahkan!', 'success');
     }).catch(err => showToast(parseErrorMessage(err, "Gagal tambah jabatan"), 'error'));
   };
 
@@ -132,7 +136,6 @@ function ManagementData() {
     }).then(() => {
       setInputBidang('');
       muatSemuaData();
-      showToast('Bidang baru berhasil ditambahkan!', 'success');
     }).catch(err => showToast(parseErrorMessage(err, "Gagal tambah bidang"), 'error'));
   };
 
@@ -166,77 +169,51 @@ function ManagementData() {
     }).catch(err => showToast(parseErrorMessage(err, "Gagal tambah data karyawan"), 'error'));
   };
 
-  const hapusData = (id, tipe) => {
+  const ubahStatusData = (item, tipe, targetStatus) => {
+    const actionText = targetStatus === 1 ? 'mengaktifkan kembali' : 'menonaktifkan';
+    const actionType = targetStatus === 1 ? 'success' : 'danger';
+
     setModalConfirm({
       isOpen: true,
-      title: `Nonaktifkan Data ${tipe.toUpperCase()}?`,
-      message: `Apakah Anda yakin ingin menonaktifkan data ${tipe} ini?`,
-      actionType: 'danger',
+      title: `${targetStatus === 1 ? 'Aktifkan' : 'Nonaktifkan'} Data ${tipe.toUpperCase()}?`,
+      message: `Apakah Anda yakin ingin ${actionText} data ${tipe} ini?`,
+      actionType: actionType,
       onConfirm: () => {
-        axios.delete(`http://localhost:8000/api/${tipe}/${id}`, {
+        let payload = {};
+        if (tipe === 'karyawan') {
+          payload = {
+            nama_lengkap: item.nama_lengkap,
+            jabatan_id: item.jabatan_id || item.jabatan?.id,
+            bidang_id: item.bidang_id || item.bidang?.id,
+            alamat: item.alamat || '',
+            no_hp: item.no_hp || '',
+            email: item.email || '',
+            status_aktif: targetStatus,
+            status: targetStatus === 1 ? 'Aktif' : 'Nonaktif'
+          };
+        } else if (tipe === 'jabatan') {
+          payload = {
+            nama_jabatan: item.nama_jabatan,
+            status_aktif: targetStatus,
+            status: targetStatus === 1 ? 'Aktif' : 'Nonaktif'
+          };
+        } else if (tipe === 'bidang') {
+          payload = {
+            nama_bidang: item.nama_bidang,
+            status_aktif: targetStatus,
+            status: targetStatus === 1 ? 'Aktif' : 'Nonaktif'
+          };
+        }
+
+        axios.put(`http://localhost:8000/api/${tipe}/${item.id}`, payload, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         })
         .then(() => {
           muatSemuaData();
-          showToast(`Data ${tipe} berhasil dinonaktifkan.`, 'success');
+          showToast(`Data ${tipe} berhasil di${targetStatus === 1 ? 'aktifkan' : 'nonaktifkan'}.`, 'success');
         })
         .catch(err => {
           showToast(parseErrorMessage(err, `Gagal mengubah status data ${tipe}`), 'error');
-        });
-      }
-    });
-  };
-
-  const hapusPermanenData = (id, tipe) => {
-    setModalConfirm({
-      isOpen: true,
-      title: `HAPUS PERMANEN ${tipe.toUpperCase()}?`,
-      message: `PERINGATAN: Data ${tipe} ini akan dihapus permanen dari sistem dan tidak bisa dikembalikan lagi! Yakin?`,
-      actionType: 'danger',
-      onConfirm: () => {
-        axios.delete(`http://localhost:8000/api/${tipe}/${id}/permanent`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        })
-        .then(() => {
-          muatSemuaData();
-          showToast(`Data ${tipe} berhasil dihapus permanen!`, 'success');
-        })
-        .catch(err => {
-          showToast(parseErrorMessage(err, `Gagal menghapus permanen data ${tipe}`), 'error');
-        });
-      }
-    });
-  };
-
-  const pulihkanKaryawan = (id) => {
-    const karyawan = karyawanList.find(k => k.id === id);
-    if (!karyawan) return;
-
-    setModalConfirm({
-      isOpen: true,
-      title: 'Aktifkan Kembali Karyawan?',
-      message: `Yakin ingin mengaktifkan kembali karyawan ${karyawan.nama_lengkap}?`,
-      actionType: 'success',
-      onConfirm: () => {
-        const payload = {
-          nama_lengkap: karyawan.nama_lengkap,
-          jabatan_id: karyawan.jabatan_id || karyawan.jabatan?.id,
-          bidang_id: karyawan.bidang_id || karyawan.bidang?.id,
-          alamat: karyawan.alamat || '',
-          no_hp: karyawan.no_hp || '',
-          email: karyawan.email || '',
-          status_aktif: 1
-        };
-
-        axios.put(`http://localhost:8000/api/karyawan/${id}`, payload, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        })
-        .then(() => {
-          muatSemuaData();
-          showToast(`Karyawan berhasil diaktifkan kembali!`, 'success');
-        })
-        .catch(err => {
-          showToast(parseErrorMessage(err, "Gagal mengaktifkan kembali karyawan"), 'error');
         });
       }
     });
@@ -296,26 +273,68 @@ function ManagementData() {
     }).catch(err => showToast(parseErrorMessage(err, "Gagal mengubah data"), 'error'));
   };
 
-  const filteredKaryawan = karyawanList.filter(k => 
-    k.nama_lengkap?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    k.jabatan?.nama_jabatan?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    k.bidang?.nama_bidang?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    k.alamat?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    k.no_hp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    k.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    k.user?.username?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const displayedKaryawan = [...filteredKaryawan].reverse().slice(0, 5);
+  // CEK APAKAH ADA MINIMAL 1 DATA NONAKTIF
+  const hasNonaktifKaryawan = useMemo(() => {
+    return karyawanList.some(k => k.status === 'Nonaktif' || k.status_aktif === 0 || k.status_aktif === '0');
+  }, [karyawanList]);
 
-  const filteredJabatan = jabatanList.filter(j => 
-    j.nama_jabatan?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const displayedJabatan = [...filteredJabatan].reverse().slice(0, 5);
+  const hasNonaktifJabatan = useMemo(() => {
+    return jabatanList.some(j => j.status === 'Nonaktif' || j.status_aktif === 0 || j.status_aktif === '0');
+  }, [jabatanList]);
 
-  const filteredBidang = bidangList.filter(b => 
-    b.nama_bidang?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const displayedBidang = [...filteredBidang].reverse().slice(0, 5);
+  // FIX: Variabel ini sebelumnya belum dideklarasikan
+  const hasNonaktifBidang = useMemo(() => {
+    return bidangList.some(b => b.status === 'Nonaktif' || b.status_aktif === 0 || b.status_aktif === '0');
+  }, [bidangList]);
+
+  // Filter & Ordering Karyawan
+  const filteredKaryawan = karyawanList.filter(k => {
+    const matchSearch = 
+      k.nama_lengkap?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      k.jabatan?.nama_jabatan?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      k.bidang?.nama_bidang?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      k.alamat?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      k.no_hp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      k.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      k.user?.username?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const isAktif = k.status === 'Aktif' || (k.status_aktif !== 0 && k.status_aktif !== '0' && k.status !== 'Nonaktif');
+
+    if (!hasNonaktifKaryawan) return matchSearch;
+    if (filterStatusKaryawan === 'aktif') return matchSearch && isAktif;
+    if (filterStatusKaryawan === 'nonaktif') return matchSearch && !isAktif;
+    return matchSearch;
+  });
+
+  const displayedKaryawan = [...filteredKaryawan]
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .slice(0, 5);
+
+  // Filter & Ordering Jabatan
+  const filteredJabatan = jabatanList.filter(j => {
+    const matchSearch = j.nama_jabatan?.toLowerCase().includes(searchTerm.toLowerCase());
+    const isAktif = j.status === 'Aktif' || (j.status_aktif !== 0 && j.status_aktif !== '0' && j.status !== 'Nonaktif');
+
+    if (!hasNonaktifJabatan) return matchSearch;
+    if (filterStatusJabatan === 'aktif') return matchSearch && isAktif;
+    if (filterStatusJabatan === 'nonaktif') return matchSearch && !isAktif;
+    return matchSearch;
+  });
+
+  const displayedJabatan = [...filteredJabatan].sort((a, b) => Number(b.id) - Number(a.id));
+
+  // Filter & Ordering Bidang
+  const filteredBidang = bidangList.filter(b => {
+    const matchSearch = b.nama_bidang?.toLowerCase().includes(searchTerm.toLowerCase());
+    const isAktif = b.status === 'Aktif' || (b.status_aktif !== 0 && b.status_aktif !== '0' && b.status !== 'Nonaktif');
+
+    if (!hasNonaktifBidang) return matchSearch;
+    if (filterStatusBidang === 'aktif') return matchSearch && isAktif;
+    if (filterStatusBidang === 'nonaktif') return matchSearch && !isAktif;
+    return matchSearch;
+  });
+
+  const displayedBidang = [...filteredBidang].sort((a, b) => Number(b.id) - Number(a.id));
 
   const handleTabChange = (tabName) => {
     setActiveTab(tabName);
@@ -547,6 +566,44 @@ function ManagementData() {
                 </div>
               </form>
 
+              {hasNonaktifKaryawan && (
+                <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl w-fit text-xs font-bold border border-slate-200/60">
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatusKaryawan('aktif')}
+                    className={`px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+                      filterStatusKaryawan === 'aktif'
+                        ? 'bg-emerald-500 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-800'
+                    }`}
+                  >
+                    🟢 Aktif ({karyawanList.filter(k => k.status === 'Aktif' || (k.status_aktif !== 0 && k.status_aktif !== '0' && k.status !== 'Nonaktif')).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatusKaryawan('nonaktif')}
+                    className={`px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+                      filterStatusKaryawan === 'nonaktif'
+                        ? 'bg-rose-500 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-800'
+                    }`}
+                  >
+                    🔴 Nonaktif ({karyawanList.filter(k => k.status === 'Nonaktif' || k.status_aktif === 0 || k.status_aktif === '0').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatusKaryawan('semua')}
+                    className={`px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+                      filterStatusKaryawan === 'semua'
+                        ? 'bg-sky-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-800'
+                    }`}
+                  >
+                    📋 Semua ({karyawanList.length})
+                  </button>
+                </div>
+              )}
+
               <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
@@ -567,7 +624,9 @@ function ManagementData() {
                         </td>
                       </tr>
                     ) : (
-                      displayedKaryawan.map((k) => (
+                      displayedKaryawan.map((k) => {
+                        const isAktif = k.status === 'Aktif' || (k.status_aktif !== 0 && k.status_aktif !== '0' && k.status !== 'Nonaktif');
+                        return (
                         <tr key={k.id} className="hover:bg-sky-50/30 transition-colors duration-150 group">
                           <td className="py-3 px-4 text-slate-800">
                             <div className="font-bold text-xs text-slate-800 group-hover:text-sky-600 transition-colors">{k.nama_lengkap}</div>
@@ -596,7 +655,7 @@ function ManagementData() {
                             <div className="text-[10px] italic text-slate-400 truncate max-w-[180px]" title={k.alamat}>📍 {k.alamat || '-'}</div>
                           </td>
                           <td className="py-3 px-3 text-center">
-                            {k.status_aktif === 1 || k.status_aktif === '1' ? (
+                            {isAktif ? (
                               <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-bold text-[10px] inline-block">
                                 Aktif
                               </span>
@@ -609,23 +668,19 @@ function ManagementData() {
                           <td className="py-3 px-4 text-center">
                             <div className="flex justify-center gap-1.5 items-center">
                               <button type="button" onClick={() => bukaModalDetail(k)} className="p-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-600 transition-all duration-150 cursor-pointer" title="Lihat Rincian">👁️</button>
-                              <button type="button" onClick={() => bukaModalEdit(k, 'karyawan')} className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-all duration-150 cursor-pointer" title="Edit Data">✏️</button>
+                              <button type="button" onClick={() => bukaModalEdit(k, 'karyawan')} className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-all duration-150 cursor-pointer" title="Edit Data">✏</button>
                               
-                              {(userRole === 'admin' || userRole === 'master_admin') && (
-                                k.status_aktif === 1 || k.status_aktif === '1' ? (
-                                  <button type="button" onClick={() => hapusData(k.id, 'karyawan')} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all duration-150 cursor-pointer" title="Nonaktifkan Karyawan">✕</button>
-                                ) : (
-                                  <button type="button" onClick={() => pulihkanKaryawan(k.id)} className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-all duration-150 cursor-pointer" title="Aktifkan Kembali">✅</button>
-                                )
-                              )}
-
                               {userRole === 'master_admin' && (
-                                <button type="button" onClick={() => hapusPermanenData(k.id, 'karyawan')} className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-600 transition-all duration-150 cursor-pointer" title="Hapus Permanen">🗑️</button>
+                                isAktif ? (
+                                  <button type="button" onClick={() => ubahStatusData(k, 'karyawan', 0)} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all duration-150 cursor-pointer" title="Nonaktifkan Karyawan">❌</button>
+                                ) : (
+                                  <button type="button" onClick={() => ubahStatusData(k, 'karyawan', 1)} className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-all duration-150 cursor-pointer" title="Aktifkan Kembali">✅</button>
+                                )
                               )}
                             </div>
                           </td>
                         </tr>
-                      ))
+                      )})
                     )}
                   </tbody>
                 </table>
@@ -640,9 +695,6 @@ function ManagementData() {
                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm md:text-base">
                   <span className="p-1.5 bg-sky-50 text-sky-600 rounded-lg text-sm">💼</span> Master Jabatan
                 </h3>
-                <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
-                  Maksimal 5 Jabatan Terbaru
-                </span>
               </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -663,37 +715,89 @@ function ManagementData() {
                   </button>
                 </form>
 
-                <div className="lg:col-span-7 border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 text-white font-semibold text-[10px] uppercase tracking-wider">
-                      <tr>
-                        <th className="py-3 px-4">Nama Jabatan</th>
-                        <th className="py-3 px-4 text-right w-28">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {displayedJabatan.length === 0 ? (
-                        <tr><td colSpan="2" className="text-center py-6 text-slate-400 italic font-medium">{searchTerm ? 'Jabatan tidak ditemukan.' : 'Belum ada data jabatan.'}</td></tr>
-                      ) : (
-                        displayedJabatan.map((j) => (
-                          <tr key={j.id} className="hover:bg-sky-50/30 transition-colors duration-150">
-                            <td className="font-bold text-slate-800 py-3 px-4 text-xs">{j.nama_jabatan}</td>
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex justify-end gap-1.5">
-                                <button type="button" onClick={() => bukaModalEdit(j, 'jabatan')} className="p-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-600 cursor-pointer transition-all" title="Edit">✏️</button>
-                                {(userRole === 'admin' || userRole === 'master_admin') && (
-                                  <button type="button" onClick={() => hapusData(j.id, 'jabatan')} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer transition-all" title="Nonaktifkan">✕</button>
+                <div className="lg:col-span-7 space-y-3">
+                  {hasNonaktifJabatan && (
+                    <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl w-fit text-xs font-bold border border-slate-200/60">
+                      <button
+                        type="button"
+                        onClick={() => setFilterStatusJabatan('aktif')}
+                        className={`px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+                          filterStatusJabatan === 'aktif'
+                            ? 'bg-emerald-500 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-800'
+                        }`}
+                      >
+                        🟢 Aktif ({jabatanList.filter(j => j.status === 'Aktif' || (j.status_aktif !== 0 && j.status_aktif !== '0' && j.status !== 'Nonaktif')).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterStatusJabatan('nonaktif')}
+                        className={`px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+                          filterStatusJabatan === 'nonaktif'
+                            ? 'bg-rose-500 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-800'
+                        }`}
+                      >
+                        🔴 Nonaktif ({jabatanList.filter(j => j.status === 'Nonaktif' || j.status_aktif === 0 || j.status_aktif === '0').length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterStatusJabatan('semua')}
+                        className={`px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+                          filterStatusJabatan === 'semua'
+                            ? 'bg-sky-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-800'
+                        }`}
+                      >
+                        📋 Semua ({jabatanList.length})
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 text-white font-semibold text-[10px] uppercase tracking-wider">
+                        <tr>
+                          <th className="py-3 px-4">Nama Jabatan</th>
+                          <th className="py-3 px-3 text-center">Status</th>
+                          <th className="py-3 px-4 text-center w-28">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {displayedJabatan.length === 0 ? (
+                          <tr><td colSpan="3" className="text-center py-6 text-slate-400 italic font-medium">{searchTerm ? 'Jabatan tidak ditemukan.' : `Belum ada data jabatan ${hasNonaktifJabatan && filterStatusJabatan !== 'semua' ? filterStatusJabatan : ''}.`}</td></tr>
+                        ) : (
+                          displayedJabatan.map((j) => {
+                            const isAktif = j.status === 'Aktif' || (j.status_aktif !== 0 && j.status_aktif !== '0' && j.status !== 'Nonaktif');
+                            return (
+                            <tr key={j.id} className="hover:bg-sky-50/30 transition-colors duration-150">
+                              <td className="font-bold text-slate-800 py-3 px-4 text-xs">{j.nama_jabatan}</td>
+                              <td className="py-3 px-3 text-center">
+                                {isAktif ? (
+                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-bold text-[10px] inline-block">Aktif</span>
+                                ) : (
+                                  <span className="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-md font-bold text-[10px] inline-block">Nonaktif</span>
                                 )}
-                                {userRole === 'master_admin' && (
-                                  <button type="button" onClick={() => hapusPermanenData(j.id, 'jabatan')} className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-600 cursor-pointer transition-all" title="Hapus Permanen">🗑️</button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <div className="flex justify-center gap-1.5">
+                                  <button type="button" onClick={() => bukaModalEdit(j, 'jabatan')} className="p-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-600 cursor-pointer transition-all" title="Edit">✏️</button>
+                                  
+                                  {userRole === 'master_admin' && (
+                                    isAktif ? (
+                                      <button type="button" onClick={() => ubahStatusData(j, 'jabatan', 0)} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer transition-all" title="Nonaktifkan">❌</button>
+                                    ) : (
+                                      <button type="button" onClick={() => ubahStatusData(j, 'jabatan', 1)} className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 cursor-pointer transition-all" title="Aktifkan Kembali">✅</button>
+                                    )
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )})
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -706,9 +810,6 @@ function ManagementData() {
                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm md:text-base">
                   <span className="p-1.5 bg-sky-50 text-sky-600 rounded-lg text-sm">🏢</span> Master Bidang / Unit
                 </h3>
-                <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
-                  Maksimal 5 Bidang Terbaru
-                </span>
               </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -729,37 +830,89 @@ function ManagementData() {
                   </button>
                 </form>
 
-                <div className="lg:col-span-7 border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 text-white font-semibold text-[10px] uppercase tracking-wider">
-                      <tr>
-                        <th className="py-3 px-4">Nama Bidang / Unit</th>
-                        <th className="py-3 px-4 text-right w-28">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {displayedBidang.length === 0 ? (
-                        <tr><td colSpan="2" className="text-center py-6 text-slate-400 italic font-medium">{searchTerm ? 'Bidang tidak ditemukan.' : 'Belum ada data bidang.'}</td></tr>
-                      ) : (
-                        displayedBidang.map((b) => (
-                          <tr key={b.id} className="hover:bg-sky-50/30 transition-colors duration-150">
-                            <td className="font-bold text-slate-800 py-3 px-4 text-xs">{b.nama_bidang}</td>
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex justify-end gap-1.5">
-                                <button type="button" onClick={() => bukaModalEdit(b, 'bidang')} className="p-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-600 cursor-pointer transition-all" title="Edit">✏️</button>
-                                {(userRole === 'admin' || userRole === 'master_admin') && (
-                                  <button type="button" onClick={() => hapusData(b.id, 'bidang')} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer transition-all" title="Nonaktifkan">✕</button>
+                <div className="lg:col-span-7 space-y-3">
+                  {hasNonaktifBidang && (
+                    <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl w-fit text-xs font-bold border border-slate-200/60">
+                      <button
+                        type="button"
+                        onClick={() => setFilterStatusBidang('aktif')}
+                        className={`px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+                          filterStatusBidang === 'aktif'
+                            ? 'bg-emerald-500 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-800'
+                        }`}
+                      >
+                        🟢 Aktif ({bidangList.filter(b => b.status === 'Aktif' || (b.status_aktif !== 0 && b.status_aktif !== '0' && b.status !== 'Nonaktif')).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterStatusBidang('nonaktif')}
+                        className={`px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+                          filterStatusBidang === 'nonaktif'
+                            ? 'bg-rose-500 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-800'
+                        }`}
+                      >
+                        🔴 Nonaktif ({bidangList.filter(b => b.status === 'Nonaktif' || b.status_aktif === 0 || b.status_aktif === '0').length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterStatusBidang('semua')}
+                        className={`px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+                          filterStatusBidang === 'semua'
+                            ? 'bg-sky-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-800'
+                        }`}
+                      >
+                        📋 Semua ({bidangList.length})
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 text-white font-semibold text-[10px] uppercase tracking-wider">
+                        <tr>
+                          <th className="py-3 px-4">Nama Bidang / Unit</th>
+                          <th className="py-3 px-3 text-center">Status</th>
+                          <th className="py-3 px-4 text-center w-28">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {displayedBidang.length === 0 ? (
+                          <tr><td colSpan="3" className="text-center py-6 text-slate-400 italic font-medium">{searchTerm ? 'Bidang tidak ditemukan.' : `Belum ada data bidang ${hasNonaktifBidang && filterStatusBidang !== 'semua' ? filterStatusBidang : ''}.`}</td></tr>
+                        ) : (
+                          displayedBidang.map((b) => {
+                            const isAktif = b.status === 'Aktif' || (b.status_aktif !== 0 && b.status_aktif !== '0' && b.status !== 'Nonaktif');
+                            return (
+                            <tr key={b.id} className="hover:bg-sky-50/30 transition-colors duration-150">
+                              <td className="font-bold text-slate-800 py-3 px-4 text-xs">{b.nama_bidang}</td>
+                              <td className="py-3 px-3 text-center">
+                                {isAktif ? (
+                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-bold text-[10px] inline-block">Aktif</span>
+                                ) : (
+                                  <span className="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-md font-bold text-[10px] inline-block">Nonaktif</span>
                                 )}
-                                {userRole === 'master_admin' && (
-                                  <button type="button" onClick={() => hapusPermanenData(b.id, 'bidang')} className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-600 cursor-pointer transition-all" title="Hapus Permanen">🗑️</button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <div className="flex justify-center gap-1.5">
+                                  <button type="button" onClick={() => bukaModalEdit(b, 'bidang')} className="p-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-600 cursor-pointer transition-all" title="Edit">✏️</button>
+                                  
+                                  {userRole === 'master_admin' && (
+                                    isAktif ? (
+                                      <button type="button" onClick={() => ubahStatusData(b, 'bidang', 0)} className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer transition-all" title="Nonaktifkan">❌</button>
+                                    ) : (
+                                      <button type="button" onClick={() => ubahStatusData(b, 'bidang', 1)} className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 cursor-pointer transition-all" title="Aktifkan Kembali">✅</button>
+                                    )
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )})
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -775,7 +928,7 @@ function ManagementData() {
             <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center text-xl ${
               modalConfirm.actionType === 'danger' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
             }`}>
-              {modalConfirm.actionType === 'danger' ? '⚠️' : '💡'}
+              {modalConfirm.actionType === 'danger' ? '⚠️️' : '💡'}
             </div>
             <div>
               <h3 className="font-bold text-slate-800 text-base">{modalConfirm.title}</h3>
@@ -838,11 +991,11 @@ function ManagementData() {
               <div className="flex justify-between items-center border-b border-slate-200/50 pb-2">
                 <span className="text-slate-400">Status Karyawan</span>
                 <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
-                  modalDetail.data.status_aktif === 1 || modalDetail.data.status_aktif === '1' 
+                  (modalDetail.data.status === 'Aktif' || (modalDetail.data.status_aktif !== 0 && modalDetail.data.status_aktif !== '0' && modalDetail.data.status !== 'Nonaktif')) 
                     ? 'bg-emerald-100 text-emerald-800' 
                     : 'bg-rose-100 text-rose-800'
                 }`}>
-                  {modalDetail.data.status_aktif === 1 || modalDetail.data.status_aktif === '1' ? 'Aktif' : 'Nonaktif'}
+                  {(modalDetail.data.status === 'Aktif' || (modalDetail.data.status_aktif !== 0 && modalDetail.data.status_aktif !== '0' && modalDetail.data.status !== 'Nonaktif')) ? 'Aktif' : 'Nonaktif'}
                 </span>
               </div>
 
@@ -997,15 +1150,7 @@ function ManagementData() {
                           <div className="relative w-full">
                             <input type={showPasswordEdit ? "text" : "password"} value={modalEdit.data.password || ''} onChange={e => setModalEdit({...modalEdit, data: { ...modalEdit.data, password: e.target.value }})} className="border border-slate-200 rounded-lg pl-3 pr-10 py-1.5 text-xs focus:outline-none focus:border-sky-500 bg-white w-full text-slate-800 h-9 font-medium" placeholder="Minimal 6 karakter..." required={!modalEdit.data.user_id && modalEdit.data.buat_akun} />
                             <button type="button" onClick={() => setShowPasswordEdit(!showPasswordEdit)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-sky-600 cursor-pointer text-sm">
-                              {showPasswordEdit ? (<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22" />
-                  </svg>
-                ) : (
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  )}
+                              {showPasswordEdit ? '🙈' : '👁️'}
                             </button>
                           </div>
                         </div>
