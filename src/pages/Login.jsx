@@ -256,7 +256,7 @@ function Login() {
           >
             {loading ? (
               <div className="flex items-center gap-2">
-                <span className="animate-spin text-sm">⏳</span>
+                <span className="animate-spin text-sm"></span>
                 <span>Memproses...</span>
               </div>
             ) : (
@@ -272,7 +272,7 @@ function Login() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-[11px] text-slate-400 font-medium relative z-10 select-none">
-          © 2026 <span className="font-bold text-sky-600">SucoFile</span> · PT Sucofindo cabang Bontang[cite: 7]
+          © 2026 <span className="font-bold text-sky-600">SucoFile</span> · PT Sucofindo cabang Bontang
         </div>
 
       </div>

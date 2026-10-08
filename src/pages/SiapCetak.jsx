@@ -98,8 +98,34 @@ const formatTanggalIndo = (dateStr) => {
 
 function SiapCetak() {
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  // PERUBAHAN 1: Tambahkan setSearchParams
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  // 🔒 DETEKSI ID USER LOGIN YANG LEBIH FLEKSIBEL
+  const currentUserId = useMemo(() => {
+    try {
+      const rawUser = localStorage.getItem('user');
+      if (!rawUser) return localStorage.getItem('user_id') || localStorage.getItem('id') || null;
+      
+      const parsed = JSON.parse(rawUser);
+      return parsed?.id || parsed?.user_id || parsed?.id_user || localStorage.getItem('user_id') || null;
+    } catch (e) {
+      return localStorage.getItem('user_id') || localStorage.getItem('id') || null;
+    }
+  }, []);
+
+  // 🔒 DETEKSI ROLE USER LOGIN (MASTER ADMIN VS ADMIN BIASA)
+  const currentUserRole = useMemo(() => {
+    try {
+      const rawUser = localStorage.getItem('user');
+      if (!rawUser) return (localStorage.getItem('role') || '').toLowerCase();
+      const parsed = JSON.parse(rawUser);
+      return (parsed?.role || parsed?.role_name || parsed?.level || localStorage.getItem('role') || '').toLowerCase();
+    } catch (e) {
+      return (localStorage.getItem('role') || '').toLowerCase();
+    }
+  }, []);
 
   // Inisialisasi tab awal dari state navigasi / query params fleksibel
   const [activeTab, setActiveTab] = useState(() => {
@@ -124,6 +150,50 @@ function SiapCetak() {
       }
     };
   }, []);
+
+  // 🔒 LOGIKA HAK AKSES DAN KEPEMILIKAN FILE SAKTI
+  const isItemMilikUser = useCallback((item) => {
+    if (!currentUserId) return true;
+
+    // 👑 Kalo Master Admin / Super Admin, BEBAS LIHAT SEMUA BERKAS!
+    const isMaster = 
+      currentUserRole.includes('master') || 
+      currentUserRole.includes('super') || 
+      currentUserRole === 'admin_master';
+
+    if (isMaster) return true;
+
+    // 👤 Kalo Admin Biasa, cek ID Pembuat ATAU ID Mengetahui / Penerima
+    const idPembuat = 
+      item.user_id || 
+      item.created_by || 
+      item.id_user || 
+      item.pelapor_id ||
+      item.pembuat_id ||
+      item.user?.id ||
+      dapatkanValueSakti(item, 'user_id') ||
+      dapatkanValueSakti(item, 'created_by') ||
+      dapatkanValueSakti(item, 'id_user') ||
+      dapatkanValueSakti(item, 'id_pelapor');
+
+    const idMengetahui =
+      item.mengetahui_id ||
+      item.diketahui_oleh ||
+      item.penerima_id ||
+      item.user_tujuan ||
+      dapatkanValueSakti(item, 'mengetahui_id') ||
+      dapatkanValueSakti(item, 'diketahui_oleh') ||
+      dapatkanValueSakti(item, 'mengetahui') ||
+      dapatkanValueSakti(item, 'penerima_id');
+
+    // Kalau berkas tanpa ID spesifik, tetap tampilkan
+    if (!idPembuat && !idMengetahui) return true;
+
+    const isPembuat = String(idPembuat) === String(currentUserId);
+    const isMengetahui = String(idMengetahui) === String(currentUserId);
+
+    return isPembuat || isMengetahui;
+  }, [currentUserId, currentUserRole]);
 
   // DETEKSI PENANDA / HIGHLIGHT SECARA MAKSIMAL & FLEKSIBEL
   useEffect(() => {
@@ -159,6 +229,17 @@ function SiapCetak() {
       return () => clearTimeout(timer);
     }
   }, [location.state, searchParams]);
+
+  // PERUBAHAN 2: SINKRONISASI STATE TAB KE URL
+  useEffect(() => {
+    const tabDiUrl = searchParams.get('tab');
+    if (tabDiUrl !== activeTab) {
+      setSearchParams(prev => {
+        prev.set('tab', activeTab);
+        return prev;
+      }, { replace: true }); 
+    }
+  }, [activeTab, searchParams, setSearchParams]);
 
   const ambilAntreanCetak = useCallback(() => {
     setLoading(true);
@@ -216,6 +297,30 @@ function SiapCetak() {
     }
   }, [targetHighlightItem, loading, activeTab]);
 
+  // ✏️ FUNGSI NAVIGASI UNTUK KLIK TOMBOL EDIT SIAP CETAK (DIPERBARUI)
+  // SEKARANG SAMA RINGANNYA SEPERTI DRAFT
+  const handleEditAction = (file) => {
+    // Gunakan helper pintar yang sudah ada di kodemu untuk mendeteksi jenis dokumen secara akurat
+    const kategori = dapatkanKategoriDokumen(file);
+    let targetRoute = '/draft-penyerahan'; // Default fallback
+    
+    // Tentukan route berdasarkan kategori hasil deteksi
+    if (kategori === 'ba_kerusakan') {
+        targetRoute = '/draft-kerusakan';
+    } else if (kategori === 'surat_tugas') {
+        targetRoute = '/draft-surat-tugas';
+    } else if (kategori === 'tor_barang') {
+        targetRoute = '/draft-tor-barang';
+    } else if (kategori === 'tor_jasa') {
+        targetRoute = '/draft-tor-jasa';
+    } else if (kategori === 'ba_penyerahan') {
+        targetRoute = '/draft-penyerahan';
+    }
+
+    // Eksekusi navigasi
+    navigate(`${targetRoute}?siap_cetak_id=${file.id}`);
+  };
+
   const handlePrintAction = (id, namaDokumen) => {
     setPrintingId(id);
     setHighlightTarget(null);
@@ -238,10 +343,8 @@ function SiapCetak() {
       .finally(() => setPrintingId(null));
   };
 
-  // 🌟 PERBAIKAN UTAMA: KIRIM NAMA PERSISI & SIMPAN KE SESSION STORAGE
   const handleSelesaiTanpaTtd = (file) => {
     const id = file.id;
-    // Menggunakan Nama Lengkap Berkas Presisi (Misal: "BA Penyerahan - 026/BTG-IX/BA/2026")
     const namaPresisi = file.nama_arsip_display || file.nomor_dokumen || file.nama_dokumen;
     const targetTabDoc = dapatkanKategoriDokumen(file) || activeTab;
 
@@ -250,7 +353,6 @@ function SiapCetak() {
       .then((res) => {
         const idArsipBaru = res.data?.data?.id || res.data?.id || res.data?.arsip_id || res.data?.dokumen_id || id;
         
-        // Simpan ke Session Storage agar penanda PERSISTEN walau pindah-pindah halaman
         const highlightStorage = {
           highlightId: idArsipBaru,
           nomorDokumen: namaPresisi,
@@ -276,18 +378,23 @@ function SiapCetak() {
     const counts = { ba_penyerahan: 0, ba_kerusakan: 0, surat_tugas: 0, tor_barang: 0, tor_jasa: 0 };
     antreanList.forEach(item => {
       if (item.foto_ttd) return;
+
+      if (!isItemMilikUser(item)) return;
+
       const kat = dapatkanKategoriDokumen(item);
       if (counts[kat] !== undefined) {
         counts[kat]++;
       }
     });
     return counts;
-  }, [antreanList]);
+  }, [antreanList, isItemMilikUser]);
 
   const daftarFileTerfilter = useMemo(() => {
     const lowerSearch = searchTerm.toLowerCase();
     return antreanList.filter(item => {
       if (item.foto_ttd) return false;
+
+      if (!isItemMilikUser(item)) return false;
 
       const namaDokumen = (item.nama_dokumen || '').toLowerCase();
       const namaArsipDisplay = (item.nama_arsip_display || '').toLowerCase();
@@ -296,7 +403,7 @@ function SiapCetak() {
 
       return dapatkanKategoriDokumen(item) === activeTab;
     });
-  }, [antreanList, searchTerm, activeTab]);
+  }, [antreanList, searchTerm, activeTab, isItemMilikUser]);
 
   return (
     <div id="siap-cetak-wrapper" className="bg-[#F4F8FC] text-slate-700 flex h-screen w-full overflow-hidden antialiased">
@@ -381,7 +488,7 @@ function SiapCetak() {
           </section>
 
           {loading ? (
-            <div className="bg-white rounded-3xl border border-sky-100/80 p-16 text-center space-y-4 shadow-xs animate-pulse">
+            <div className="bg-[#white] rounded-3xl border border-sky-100/80 p-16 text-center space-y-4 shadow-xs animate-pulse">
               <div className="text-4xl text-sky-500 animate-spin inline-block">⏳</div>
               <p className="text-sky-600 font-bold text-xs">Sedang memilah berkas dari database...</p>
             </div>
@@ -395,7 +502,7 @@ function SiapCetak() {
             <div className="space-y-3">
               <div className="px-6 py-1 flex items-center justify-between text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
                 <span>Detail Nama Berkas</span>
-                <span>Aksi Cetak & Finalisasi</span>
+                <span>Aksi Edit, Cetak & Finalisasi</span>
               </div>
 
               <div className="space-y-2">
@@ -481,6 +588,18 @@ function SiapCetak() {
                       </div>
 
                       <div className="flex items-center justify-center gap-2.5">
+                        {/* ✏️ TOMBOL EDIT BARU */}
+                        <button
+                          type="button"
+                          onClick={() => handleEditAction(file)}
+                          title="Edit/Revisi data berkas ini"
+                          className="px-3.5 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer bg-amber-500 hover:bg-amber-600 text-white"
+                        >
+                          ✏ EDIT
+                        </button>
+
+                        <span className="text-sky-200 text-sm font-light select-none">|</span>
+
                         <button 
                           type="button"
                           disabled={printingId === file.id}

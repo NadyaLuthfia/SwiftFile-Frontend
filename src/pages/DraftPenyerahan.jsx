@@ -9,6 +9,9 @@ function DraftPenyerahan() {
   
   const templateIdParam = searchParams.get('template_id');
   const draftIdParam = searchParams.get('draft_id'); 
+  const siapCetakIdParam = searchParams.get('siap_cetak_id'); 
+  // Tambahan parameter buat nangkap ID Arsip dari URL kalau ada
+  const arsipIdParam = searchParams.get('arsip_id'); 
 
   // State Utama
   const [currentTemplateId, setCurrentTemplateId] = useState(null); 
@@ -211,14 +214,100 @@ function DraftPenyerahan() {
       });
   }, [ambilVariabelTemplate]);
 
+  const ambilDetailSiapCetak = useCallback((siapCetakId) => {
+    setLoadingFetch(true);
+    const token = localStorage.getItem('token');
+
+    axios.get(`${BACKEND_URL}/api/siap-cetak/${siapCetakId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      }
+    })
+      .then(res => {
+        const data = res.data.data || res.data;
+        
+        setNamaDraft(data.nama_dokumen || data.nama_draft);
+        setCurrentTemplateId(data.template_id);
+
+        let isiVariabel = data.variables || data.data_input || {};
+        
+        if (typeof isiVariabel === 'string') {
+          try { isiVariabel = JSON.parse(isiVariabel); } catch (e) { isiVariabel = {}; }
+        }
+
+        if (data.items) {
+          setDokumenItem(data.items);
+        }
+
+        ambilVariabelTemplate(data.template_id, isiVariabel);
+
+        setFormData(prevData => ({
+            ...prevData,      
+            ...isiVariabel    
+        }));
+      })
+      .catch(err => {
+        console.error("Gagal memuat detail siap cetak:", err);
+        setLoadingFetch(false); 
+      });
+  }, [ambilVariabelTemplate]);
+
+  // Tambahan function buat ngambil detail kalau pakai arsip_id
+  const ambilDetailArsip = useCallback((arsipId) => {
+    setLoadingFetch(true);
+    const token = localStorage.getItem('token');
+
+    axios.get(`${BACKEND_URL}/api/arsip/${arsipId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      }
+    })
+      .then(res => {
+        const data = res.data.data || res.data;
+        
+        setNamaDraft(data.nama_dokumen || data.nama_draft);
+        setCurrentTemplateId(data.template_id);
+
+        let isiVariabel = data.variables || data.data_input || {};
+        
+        if (typeof isiVariabel === 'string') {
+          try { isiVariabel = JSON.parse(isiVariabel); } catch (e) { isiVariabel = {}; }
+        }
+
+        if (data.items) {
+          setDokumenItem(data.items);
+        }
+
+        ambilVariabelTemplate(data.template_id, isiVariabel);
+
+        setFormData(prevData => ({
+            ...prevData,
+            ...isiVariabel
+        }));
+      })
+      .catch(err => {
+        console.error("Gagal memuat detail arsip:", err);
+        setLoadingFetch(false);
+      });
+  }, [ambilVariabelTemplate]);
+
   useEffect(() => {
     muatDataKaryawan(); 
 
-    if (draftIdParam) {
+    // Tambahan kondisi if else buat nangkep arsipIdParam
+    if (arsipIdParam) {
+        ambilDetailArsip(arsipIdParam);
+    } else if (siapCetakIdParam) {
+        ambilDetailSiapCetak(siapCetakIdParam);
+    } else if (draftIdParam) {
       ambilDetailDraft(draftIdParam);
     } else if (templateIdParam) {
       setCurrentTemplateId(templateIdParam);
       ambilVariabelTemplate(templateIdParam);
+    } else {
+        setLoadingFetch(false);
     }
 
     return () => {
@@ -226,7 +315,8 @@ function DraftPenyerahan() {
         if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
       });
     };
-  }, [templateIdParam, draftIdParam, muatDataKaryawan, ambilDetailDraft]);
+  }, [templateIdParam, draftIdParam, siapCetakIdParam, arsipIdParam, muatDataKaryawan, ambilDetailDraft, ambilDetailSiapCetak, ambilDetailArsip]);
+
 
   const handleCalendarChange = (e) => {
     const value = e.target.value; 
@@ -437,6 +527,69 @@ function DraftPenyerahan() {
     });
   };
 
+  const handleUpdateSiapCetak = (e) => {
+    e.preventDefault();
+    setLoadingSelesai(true);
+    const token = localStorage.getItem('token');
+    
+    const payloadMultipart = generateMultipartData();
+    payloadMultipart.append('items', JSON.stringify(dokumen_item));
+    payloadMultipart.append('_method', 'PUT'); 
+
+    axios.post(`${BACKEND_URL}/api/siap-cetak/${siapCetakIdParam}`, payloadMultipart, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      }
+    })
+    .then((res) => {
+      setLoadingSelesai(false);
+      navigate(`/siap-cetak?highlight=${encodeURIComponent(siapCetakIdParam)}&tab=ba_penyerahan`, {
+        state: { 
+          highlightId: siapCetakIdParam,
+          highlight_id: siapCetakIdParam,
+          targetTab: 'ba_penyerahan'
+        }
+      });
+    })
+    .catch(err => {
+      console.error("Gagal update antrean cetak:", err);
+      setLoadingSelesai(false);
+    });
+  };
+
+  // Tambahan function update khusus arsip (karena controller siap handle update($id))
+  const handleUpdateArsip = (e) => {
+    e.preventDefault();
+    setLoadingSelesai(true);
+    const token = localStorage.getItem('token');
+    
+    const payloadMultipart = generateMultipartData();
+    payloadMultipart.append('items', JSON.stringify(dokumen_item));
+    payloadMultipart.append('_method', 'PUT'); 
+
+    axios.post(`${BACKEND_URL}/api/arsip/${arsipIdParam}`, payloadMultipart, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      }
+    })
+    .then((res) => {
+      setLoadingSelesai(false);
+      navigate(`/arsip?highlight=${encodeURIComponent(arsipIdParam)}`, {
+        state: { 
+          highlightId: arsipIdParam
+        }
+      });
+    })
+    .catch(err => {
+      console.error("Gagal update arsip:", err);
+      setLoadingSelesai(false);
+    });
+  };
+
   const formatLabel = (text) => {
     return text.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
@@ -543,7 +696,7 @@ function DraftPenyerahan() {
           
           <header className="flex justify-between items-center">
             <h1 className="text-3xl font-black text-slate-800 tracking-tight">
-              {draftIdParam ? 'Edit Draft:' : 'Draft Baru:'}{' '}
+              {arsipIdParam ? 'Edit Arsip:' : draftIdParam ? 'Edit Draft:' : siapCetakIdParam ? 'Edit Siap Cetak:' : 'Draft Baru:'}{' '}
               <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">
                 {templateInfo?.nama || 'Memuat...'}
               </span>
@@ -566,7 +719,7 @@ function DraftPenyerahan() {
               
               {/* PANEL KIRI FORM */}
               <div className="lg:col-span-7">
-                <form onSubmit={handleSelesai} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
+                <form onSubmit={arsipIdParam ? handleUpdateArsip : siapCetakIdParam ? handleUpdateSiapCetak : handleSelesai} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                   
                   <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-sky-950 font-medium">
                     <span className="text-lg">🤖</span>
@@ -660,7 +813,6 @@ function DraftPenyerahan() {
                       <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">
                         Upload Foto Dokumentasi <span className="text-slate-400 font-normal lowercase">(Dapat menambah/menghapus per foto)</span>
                       </label>
-                      {/* 1. KOTAK KECIL BIRU DIBAWAH INI (ANIMASI DIHAPUS) */}
                       <span className="text-xs font-extrabold bg-blue-600 text-white px-2.5 py-1 rounded-full shadow-sm">
                         {totalFotoCount} foto terdaftar
                       </span>
@@ -700,7 +852,6 @@ function DraftPenyerahan() {
                                 >
                                   ✕
                                 </button>
-                                {/* 2. KOTAK KECIL BIRU PADA FOTO DB DIBAWAH INI (ANIMASI DIHAPUS) */}
                                 <span className="absolute bottom-1 right-1 bg-blue-600 text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold shadow-xs">
                                   DB F{index + 1}
                                 </span>
@@ -739,22 +890,42 @@ function DraftPenyerahan() {
                   </div>
 
                   <div className="pt-6 border-t border-sky-100 flex flex-wrap justify-end gap-3">
-                    <button 
-                      type="button" 
-                      onClick={handleSaveDraft} 
-                      disabled={loadingDraft || loadingSelesai} 
-                      className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
-                    >
-                      {loadingDraft ? 'Menyimpan...' : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'}
-                    </button>
-                    
-                    <button 
-                      type="submit" 
-                      disabled={loadingDraft || loadingSelesai} 
-                      className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
-                    >
-                      {loadingSelesai ? 'Memproses...' : 'Selesai & Kirim Ke Antrean'}
-                    </button>
+                    {arsipIdParam ? (
+                      <button 
+                        type="submit" 
+                        disabled={loadingSelesai} 
+                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-emerald-200/50 hover:shadow-lg hover:shadow-emerald-300/60 disabled:opacity-50 cursor-pointer"
+                      >
+                        {loadingSelesai ? 'Memperbarui...' : '🔄 Update Arsip'}
+                      </button>
+                    ) : siapCetakIdParam ? (
+                      <button 
+                        type="submit" 
+                        disabled={loadingSelesai} 
+                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-emerald-200/50 hover:shadow-lg hover:shadow-emerald-300/60 disabled:opacity-50 cursor-pointer"
+                      >
+                        {loadingSelesai ? 'Memperbarui...' : '🔄 Update Antrean Cetak'}
+                      </button>
+                    ) : (
+                      <>
+                        <button 
+                          type="button" 
+                          onClick={handleSaveDraft} 
+                          disabled={loadingDraft || loadingSelesai} 
+                          className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
+                        >
+                          {loadingDraft ? 'Menyimpan...' : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'}
+                        </button>
+                        
+                        <button 
+                          type="submit" 
+                          disabled={loadingDraft || loadingSelesai} 
+                          className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
+                        >
+                          {loadingSelesai ? 'Memproses...' : 'Selesai & Kirim Ke Antrean'}
+                        </button>
+                      </>
+                    )}
                   </div>
 
                 </form>
@@ -767,7 +938,6 @@ function DraftPenyerahan() {
                     <span className="text-base">📄</span>
                     <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Live Document Preview</h3>
                   </div>
-                  {/* 3. KOTAK KECIL BIRU "Auto Sync" DIBAWAH INI (ANIMASI DIHAPUS) */}
                   <span className="text-[10px] bg-blue-600 text-white font-bold px-3 py-1 rounded-full shadow-md">
                     Auto Sync
                   </span>

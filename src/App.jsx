@@ -6,6 +6,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import FileTemplate from './pages/FileTemplate'; 
 import SiapCetak from './pages/SiapCetak';
 import ArsipHistory from './pages/ArsipHistory';
+import ArsipDokumen from './pages/ArsipDokumen'; // 🚀 Import Komponen Arsip Dokumen
 import Login from './pages/Login';
 import DraftDokumen from './pages/DraftDokument'; 
 import DraftPenyerahan from './pages/DraftPenyerahan';
@@ -15,6 +16,7 @@ import DraftTorJasa from './pages/DraftTorJasa';
 import ManagementData from './pages/ManagementData';
 import DraftSuratTugas from './pages/DraftSuratTugas';
 import MonitoringData from './pages/MonitoringData';
+import PanduanUser from './pages/PanduanUser';
 
 function App() {
   const token = localStorage.getItem('token');
@@ -59,9 +61,11 @@ function App() {
                 <Route path="/draft-tor-jasa" element={<DraftTorJasa />} />
                 <Route path="/siap-cetak" element={<SiapCetak />} />
                 <Route path="/arsip-history" element={<ArsipHistory />} />
-                <Route path="/arsip" element={<ArsipHistory />} /> {/* 🚀 Tambahan Route Alias */}
+                <Route path="/arsip-dokumen" element={<ArsipDokumen />} /> {/* 🚀 Route Baru */}
+                <Route path="/arsip" element={<ArsipDokumen />} />
                 <Route path="/management-data" element={<ManagementData />} />
                 <Route path="/monitoring-data" element={<MonitoringData />} />
+                <Route path="/panduan-user" element={<PanduanUser />} />
                 <Route path="*" element={<Navigate to="/master-dashboard" replace />} />
               </>
             )}
@@ -80,9 +84,11 @@ function App() {
                 <Route path="/draft-tor-jasa" element={<DraftTorJasa />} />
                 <Route path="/siap-cetak" element={<SiapCetak />} />
                 <Route path="/arsip-history" element={<ArsipHistory />} />
-                <Route path="/arsip" element={<ArsipHistory />} /> {/* 🚀 Tambahan Route Alias */}
+                <Route path="/arsip-dokumen" element={<ArsipDokumen />} /> {/* 🚀 Route Baru */}
+                <Route path="/arsip" element={<ArsipDokumen />} />
                 <Route path="/management-data" element={<ManagementData />} />
                 <Route path="/monitoring-data" element={<MonitoringData />} />
+                <Route path="/panduan-user" element={<PanduanUser />} />
                 <Route path="*" element={<Navigate to="/admin-dashboard" replace />} />
               </>
             )}
@@ -101,7 +107,8 @@ function App() {
                 <Route path="/draft-tor-jasa" element={<DraftTorJasa />} />
                 <Route path="/siap-cetak" element={<SiapCetak />} />
                 <Route path="/arsip-history" element={<ArsipHistory />} />
-                <Route path="/arsip" element={<ArsipHistory />} /> {/* 🚀 Tambahan Route Alias */}
+                <Route path="/arsip" element={<ArsipHistory />} />
+                <Route path="/panduan-user" element={<PanduanUser />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </>
             )}

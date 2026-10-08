@@ -31,6 +31,9 @@ function MonitoringData() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState('');
 
+  // 🌟 STATE SUB-TAB FILTER STATUS BERKAS (Aktif / Nonaktif / Semua)
+  const [filterStatus, setFilterStatus] = useState('aktif');
+
   // STATE UNTUK PRINTING & HIGHLIGHT GLOW
   const [printingId, setPrintingId] = useState(null);
   const [activeHighlight, setActiveHighlight] = useState(null);
@@ -39,16 +42,12 @@ function MonitoringData() {
   // STATE UNTUK POP-UP MODAL RINCIAN DOKUMEN
   const [selectedFileForModal, setSelectedFileForModal] = useState(null);
 
-  // STATE POP-UP MODAL REACT (NOTIFIKASI SUKSES, ERROR & KONFIRMASI HAPUS)
+  // STATE POP-UP MODAL REACT (NOTIFIKASI SUKSES & ERROR)
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [successModalData, setSuccessModalData] = useState({ title: '', message: '' });
 
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
   const [errorModalData, setErrorModalData] = useState({ title: '', message: '' });
-
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState(null);
-  const [loadingDelete, setLoadingDelete] = useState(false);
 
   const BASE_URL = 'http://localhost:8000/api';
 
@@ -110,7 +109,7 @@ function MonitoringData() {
         triggerSuccessModal('Mencetak PDF', 'Dokumen siap dicetak dalam tab baru.');
         fetchAllFilesForMonitoring();
       } else {
-        triggerErrorModal('URL Tidak Ditemukan', 'Dokumen berhasil diproses, namun URL PDF tidak ditemukan.');
+        triggerErrorModal('URL Tidak Ditemukan', 'Dokumen berhasil dipproses, namun URL PDF tidak ditemukan.');
       }
     } catch (error) {
       console.error("Gagal melakukan konversi PDF:", error);
@@ -157,41 +156,6 @@ function MonitoringData() {
     } catch (error) {
       console.error("Gagal mengubah status:", error);
       triggerErrorModal('Gagal Status', 'Terjadi kesalahan saat mengubah status dokumen.');
-    }
-  };
-
-  const handleOpenDeleteModal = (file) => {
-    setItemToDelete(file);
-    setIsDeleteModalOpen(true);
-  };
-
-  const executeDeleteFile = async () => {
-    if (!itemToDelete) return;
-    setLoadingDelete(true);
-
-    try {
-      const token = localStorage.getItem('token');
-      
-      const response = await axios.delete(`${BASE_URL}/monitoring/${itemToDelete.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
-      if (response.data.status === 'success') {
-        setFileList(prevList => prevList.filter(file => file.id !== itemToDelete.id));
-        setIsDeleteModalOpen(false);
-        setItemToDelete(null);
-        triggerSuccessModal('Dokumen Dihapus!', 'Dokumen berhasil dihapus secara permanen.');
-      } else {
-        triggerErrorModal('Gagal Hapus', response.data.message || 'Kesalahan pada server saat menghapus dokumen.');
-      }
-    } catch (error) {
-      console.error("Gagal menghapus dokumen:", error);
-      triggerErrorModal('Gagal Sistem', 'Terjadi kesalahan saat menghapus dokumen.');
-    } finally {
-      setLoadingDelete(false);
     }
   };
 
@@ -323,13 +287,25 @@ function MonitoringData() {
     return null;
   };
 
-  // 🎯 LOGIKA PENCARIAN PRESISI DENGAN FILTER KATA UNTUK INPUT PENDEK
+  // 🌟 DETEKSI OTOMATIS: CEK APAKAH ADA MINIMAL 1 BERKAS YANG NONAKTIF
+  const hasNonaktifFiles = useMemo(() => {
+    return fileList.some(file => String(file.status_aktif) === '0' || file.status_aktif === 0 || file.status_aktif === false);
+  }, [fileList]);
+
+  // 🎯 LOGIKA PENCARIAN PRESISI DENGAN FILTER KATA & SUB-TAB STATUS (AKTIF / NONAKTIF / SEMUA)
   const filteredFiles = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
     return fileList.filter((file) => {
       const matchRole = selectedRole === '' || file.user?.role === selectedRole;
       if (!matchRole) return false;
+
+      // Filter berdasarkan status aktif/nonaktif hanya jika ada berkas nonaktif
+      const isActive = file.status_aktif == 1 || file.status_aktif === '1' || file.status_aktif === null || file.status_aktif === undefined;
+      if (hasNonaktifFiles) {
+        if (filterStatus === 'aktif' && !isActive) return false;
+        if (filterStatus === 'nonaktif' && isActive) return false;
+      }
 
       if (!query) return true;
 
@@ -345,8 +321,6 @@ function MonitoringData() {
       const detailPengadaan = (findValueByKeywords(file, ['nama_pengadaan', 'pengadaan', 'objek_pengadaan'], ['pengadaan']) || '').toLowerCase();
       const detailJasa = (findValueByKeywords(file, ['nama_jasa', 'jasa', 'jenis_jasa', 'pekerjaan', 'nama_pekerjaan'], ['jasa', 'pekerjaan']) || '').toLowerCase();
 
-      // JIKA PENCARIAN SANGAT PENDEK (1-2 KARAKTER), COCOKKAN SECARA PRESISI KATA/NILAI SPESIFIK
-      // (Mencegah kata seperti "BA Penyerahan" atau "Masyita" memanggil seluruh berkas)
       if (query.length <= 2) {
         const matchesWordOrExact = (val) => {
           if (!val) return false;
@@ -365,7 +339,6 @@ function MonitoringData() {
         );
       }
 
-      // UNTUK PENCARIAN DENGAN PANJANG > 2 KARAKTER
       return (
         namaDoc.includes(query) ||
         nomorDoc.includes(query) ||
@@ -379,7 +352,7 @@ function MonitoringData() {
         detailJasa.includes(query)
       );
     });
-  }, [fileList, searchQuery, selectedRole]);
+  }, [fileList, searchQuery, selectedRole, filterStatus, hasNonaktifFiles]);
 
   const isSuratTugas = selectedFileForModal && (
     selectedFileForModal.template_id === 3 || 
@@ -513,6 +486,15 @@ function MonitoringData() {
           stroke-dashoffset: 50;
           animation: drawCheck 0.4s ease-in-out 0.1s forwards;
         }
+
+        /* 🌊 EFEK FLOATING NAIK TURUN SLOW UNTUK HIGHLIGHT */
+        @keyframes floatSlow {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-6px); }
+        }
+        .animate-float-slow {
+          animation: floatSlow 2.8s ease-in-out infinite;
+        }
       `}</style>
 
       <Sidebar />
@@ -555,24 +537,63 @@ function MonitoringData() {
             </div>
           </section>
 
+          {/* 🌟 SUB-TAB FILTER STATUS (HANYA MUNCUL JIKA ADA MINIMAL 1 BERKAS NONAKTIF) */}
+          {hasNonaktifFiles && (
+            <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-2xl w-fit text-xs font-bold border border-slate-200/80">
+              <button
+                type="button"
+                onClick={() => setFilterStatus('aktif')}
+                className={`px-4 py-1.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                  filterStatus === 'aktif'
+                    ? 'bg-emerald-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                🟢 Berkas Aktif ({fileList.filter(f => f.status_aktif == 1 || f.status_aktif === '1' || f.status_aktif === null || f.status_aktif === undefined).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterStatus('nonaktif')}
+                className={`px-4 py-1.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                  filterStatus === 'nonaktif'
+                    ? 'bg-rose-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                🔴 Berkas Nonaktif ({fileList.filter(f => f.status_aktif == 0 || f.status_aktif === '0').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterStatus('semua')}
+                className={`px-4 py-1.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                  filterStatus === 'semua'
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                📋 Semua ({fileList.length})
+              </button>
+            </div>
+          )}
+
           {/* MAIN CONTAINER FRAME */}
           {loading ? (
-            <div className="mt-6 bg-white rounded-[28px] border border-sky-100 p-16 text-center space-y-3 shadow-xl shadow-sky-100/50">
+            <div className="mt-4 bg-white rounded-[28px] border border-sky-100 p-16 text-center space-y-3 shadow-xl shadow-sky-100/50">
               <div className="text-3xl text-sky-500 animate-spin inline-block">⏳</div>
               <p className="text-sky-600 font-bold text-xs">Sedang memilah berkas dari database...</p>
             </div>
           ) : filteredFiles.length === 0 ? (
-            <div className="mt-6 bg-white rounded-[28px] border border-sky-100 p-16 text-center space-y-2 shadow-xl shadow-sky-100/50">
+            <div className="mt-4 bg-white rounded-[28px] border border-sky-100 p-16 text-center space-y-2 shadow-xl shadow-sky-100/50">
               <div className="text-3xl select-none">📭</div>
-              <p className="text-slate-600 font-bold text-xs">Data berkas tidak ditemukan!</p>
+              <p className="text-slate-600 font-bold text-xs">Data berkas {hasNonaktifFiles && filterStatus !== 'semua' ? filterStatus : ''} tidak ditemukan!</p>
             </div>
           ) : (
-            <div className="mt-6 bg-white rounded-[28px] border border-sky-200/70 p-5 shadow-xl shadow-sky-100/60 space-y-3">
+            <div className="mt-4 bg-white rounded-[28px] border border-sky-200/70 p-5 shadow-xl shadow-sky-100/60 space-y-3">
               
               <div className="hidden md:flex items-center justify-between bg-[#F4F8FC] px-6 py-3 rounded-2xl text-[10px] font-extrabold text-sky-600 uppercase tracking-wider">
                 <div className="flex-1">DETAIL NAMA BERKAS</div>
                 <div className="w-36 text-center shrink-0">ROLE</div>
-                <div className="shrink-0 text-right w-[280px]">TINDAKAN</div> 
+                <div className="shrink-0 text-right w-[240px]">TINDAKAN</div> 
               </div>
 
               <div className="space-y-3">
@@ -586,18 +607,18 @@ function MonitoringData() {
                       ref={isHighlighted ? highlightedRef : null}
                       className={`rounded-2xl p-3.5 md:px-5 flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-500 ease-out transform ${
                         isHighlighted 
-                          ? 'bg-emerald-50/50 border-2 border-emerald-400 ring-4 ring-emerald-300/60 shadow-xl shadow-emerald-200/80 scale-[1.015] animate-pulse' 
+                          ? 'bg-sky-50/90 border-2 border-sky-400 ring-4 ring-sky-100 shadow-lg shadow-sky-200/60 animate-float-slow' 
                           : 'bg-white border border-sky-200/80 shadow-md shadow-sky-100/40 hover:shadow-xl hover:shadow-sky-200/50 hover:border-sky-300 hover:scale-[1.01] hover:-translate-y-0.5'
                       }`}
                     >
                       <div className="flex items-center gap-3.5 flex-1 min-w-0 w-full md:w-auto">
                         <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 border shadow-xs transition-colors ${
-                          isHighlighted ? 'bg-emerald-100 text-emerald-600 border-emerald-300' : 'bg-sky-50 text-sky-500 border-sky-100/80'
+                          isHighlighted ? 'bg-sky-100 text-sky-600 border-sky-300' : 'bg-sky-50 text-sky-500 border-sky-100/80'
                         }`}>
                           📄
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <div 
                               className="flex flex-col cursor-pointer group"
                               onClick={() => setSelectedFileForModal(file)}
@@ -612,7 +633,7 @@ function MonitoringData() {
                                 return (
                                   <>
                                     <p className={`text-sm font-black transition-colors truncate max-w-[320px] ${
-                                      isHighlighted ? 'text-emerald-900' : 'text-sky-600 group-hover:text-sky-400'
+                                      isHighlighted ? 'text-sky-700' : 'text-sky-600 group-hover:text-sky-400'
                                     }`}>
                                       {judul}
                                     </p>
@@ -627,8 +648,9 @@ function MonitoringData() {
                             </div>
 
                             {isHighlighted && (
-                              <span className="text-[9px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-md uppercase tracking-wider animate-bounce shadow-xs">
-                                🟢 DITANDAI DARI DASHBOARD
+                              <span className="inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-500 to-blue-600 text-white text-[9px] font-extrabold px-2.5 py-0.5 rounded-full shadow-xs uppercase tracking-wider animate-pulse">
+                                <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                                Ditandai dari Dashboard
                               </span>
                             )}
                           </div>
@@ -637,13 +659,13 @@ function MonitoringData() {
                             {renderDetailDynamic(file)}
 
                             <span className={`text-[10px] font-bold border px-2 py-0.5 rounded-lg flex items-center gap-1 shrink-0 ${
-                              isHighlighted ? 'bg-emerald-100/80 text-emerald-800 border-emerald-200' : 'bg-sky-50/90 text-sky-600 border-sky-100'
+                              isHighlighted ? 'bg-sky-100/80 text-sky-800 border-sky-200' : 'bg-sky-50/90 text-sky-600 border-sky-100'
                             }`}>
                               👤 {file.nama_pembuat}
                             </span>
                           </div>
 
-                          <p className="text-[10px] text-emerald-600 font-bold mt-1.5 flex items-center gap-1 truncate max-w-[320px]">
+                          <p className="text-[10px] text-sky-600 font-bold mt-1.5 flex items-center gap-1 truncate max-w-[320px]">
                             <span>🖨️ Tanggal Cetak Terakhir: {file.tanggal_cetak ? formatTanggalIndo(file.tanggal_cetak) : <span className="italic text-slate-400 font-normal">Belum pernah dicetak</span>}</span>
                           </p>
                         </div>
@@ -658,7 +680,7 @@ function MonitoringData() {
                         </span>
                       </div>
 
-                      <div className="shrink-0 flex items-center justify-end gap-2 w-[280px]">
+                      <div className="shrink-0 flex items-center justify-end gap-2 w-[240px]">
                         <button
                           type="button"
                           disabled={printingId === file.id}
@@ -668,7 +690,8 @@ function MonitoringData() {
                           {printingId === file.id ? 'Mengonversi PDF...' : '🖨️ CETAK FISIK'}
                         </button>
 
-                        {(userRole === 'master_admin' || userRole === 'admin') && (
+                        {/* HANYA MASTER ADMIN YANG MEMILIKI TOMBOL NONAKTIFKAN / AKTIFKAN */}
+                        {userRole === 'master_admin' && (
                           <button 
                             type="button"
                             onClick={() => handleToggleStatus(file.id)}
@@ -680,17 +703,6 @@ function MonitoringData() {
                             title={isActive ? "Nonaktifkan Dokumen" : "Aktifkan Dokumen"}
                           >
                             {isActive ? '🚫 Nonaktifkan' : '✅ Aktifkan'}
-                          </button>
-                        )}
-
-                        {userRole === 'master_admin' && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDeleteModal(file)}
-                            className="bg-red-50 hover:bg-red-500 text-red-600 hover:text-white border border-red-200 px-3 py-2 rounded-xl text-[12px] transition-all shadow-2xs cursor-pointer flex items-center justify-center active:scale-95"
-                            title="Hapus Dokumen Secara Permanen"
-                          >
-                            🗑️
                           </button>
                         )}
                       </div>
@@ -790,50 +802,6 @@ function MonitoringData() {
               </button>
             </div>
 
-          </div>
-        </div>
-      )}
-
-      {/* POP-UP MODAL KONFIRMASI HAPUS PERMANEN */}
-      {isDeleteModalOpen && itemToDelete && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 transition-all">
-          <div className="bg-white rounded-3xl shadow-2xl border border-sky-100 w-full max-w-xs overflow-hidden p-6 text-center space-y-4 animate-pop relative">
-            
-            <div className="w-14 h-14 bg-gradient-to-tr from-rose-100 to-red-100 text-rose-500 rounded-2xl flex items-center justify-center text-2xl mx-auto border border-rose-200/60 shadow-inner">
-              🗑️
-            </div>
-
-            <div className="space-y-1">
-              <h3 className="text-base font-extrabold text-slate-800">
-                Hapus Dokumen?
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                Apakah Anda yakin ingin menghapus dokumen ini secara permanen?<br />
-                <span className="font-bold text-slate-700">"{itemToDelete.nama_dokumen || itemToDelete.nomor_dokumen || 'Dokumen'}"</span>
-              </p>
-            </div>
-
-            <div className="flex gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsDeleteModalOpen(false);
-                  setItemToDelete(null);
-                }}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl text-xs transition-all active:scale-95 cursor-pointer"
-              >
-                Batal
-              </button>
-
-              <button
-                type="button"
-                onClick={executeDeleteFile}
-                disabled={loadingDelete}
-                className="flex-1 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-md shadow-rose-200 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
-              >
-                {loadingDelete ? "Menghapus..." : "Ya, Hapus"}
-              </button>
-            </div>
           </div>
         </div>
       )}

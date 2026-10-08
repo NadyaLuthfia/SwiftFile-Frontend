@@ -9,6 +9,8 @@ function DraftSuratTugas() {
   
   const templateIdParam = searchParams.get('template_id');
   const draftIdParam = searchParams.get('draft_id'); 
+  const siapCetakIdParam = searchParams.get('siap_cetak_id'); 
+  const arsipIdParam = searchParams.get('arsip_id'); 
 
   // State Utama
   const [currentTemplateId, setCurrentTemplateId] = useState(null); 
@@ -56,18 +58,24 @@ function DraftSuratTugas() {
   useEffect(() => {
     muatDataKaryawan(); 
 
-    if (draftIdParam) {
+    if (arsipIdParam) {
+      ambilDetailArsip(arsipIdParam);
+    } else if (siapCetakIdParam) {
+      ambilDetailSiapCetak(siapCetakIdParam);
+    } else if (draftIdParam) {
       ambilDetailDraft(draftIdParam);
     } else if (templateIdParam) {
       setCurrentTemplateId(templateIdParam);
       ambilVariabelTemplate(templateIdParam);
+    } else {
+      setLoadingFetch(false);
     }
-  }, [templateIdParam, draftIdParam]);
+  }, [templateIdParam, draftIdParam, siapCetakIdParam, arsipIdParam]);
 
   // AUTOMATION LOGIC: Tetap aktif menghitung total hari di latar belakang
   useEffect(() => {
-    const tglBerangkat = formData.tanggal_berangkat;
-    const tglTiba = formData.tanggal_tiba;
+    const tglBerangkat = formData.tanggal_berangkat || formData.TANGGAL_BERANGKAT;
+    const tglTiba = formData.tanggal_tiba || formData.TANGGAL_TIBA;
 
     if (tglBerangkat && tglTiba) {
       const start = new Date(tglBerangkat);
@@ -79,12 +87,17 @@ function DraftSuratTugas() {
         
         const totalHariHitung = diffDays > 0 ? String(diffDays) : '0';
 
-        if (formData.total_hari !== totalHariHitung) {
-          setFormData(prev => ({ ...prev, total_hari: totalHariHitung }));
+        // Update variasi nama variabel untuk total_hari
+        if (formData.total_hari !== totalHariHitung && formData.TOTAL_HARI !== totalHariHitung) {
+          setFormData(prev => ({ 
+            ...prev, 
+            ...(fields.includes('total_hari') && { total_hari: totalHariHitung }),
+            ...(fields.includes('TOTAL_HARI') && { TOTAL_HARI: totalHariHitung })
+          }));
         }
       }
     }
-  }, [formData.tanggal_berangkat, formData.tanggal_tiba, formData.total_hari]);
+  }, [formData.tanggal_berangkat, formData.TANGGAL_BERANGKAT, formData.tanggal_tiba, formData.TANGGAL_TIBA, formData.total_hari, formData.TOTAL_HARI, fields]);
 
   const ambilDetailDraft = (draftId) => {
     setLoadingFetch(true);
@@ -118,6 +131,84 @@ function DraftSuratTugas() {
       })
       .catch(err => {
         console.error("Gagal memuat detail draft:", err);
+        setLoadingFetch(false);
+      });
+  };
+
+  const ambilDetailSiapCetak = (siapCetakId) => {
+    setLoadingFetch(true);
+    const token = localStorage.getItem('token');
+
+    axios.get(`http://localhost:8000/api/siap-cetak/${siapCetakId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      }
+    })
+      .then(res => {
+        const data = res.data.data || res.data;
+        
+        setNamaDraft(data.nama_dokumen || data.nama_draft);
+        setCurrentTemplateId(data.template_id);
+
+        let isiVariabel = data.variables || data.data_input || {};
+        
+        if (typeof isiVariabel === 'string') {
+          try { isiVariabel = JSON.parse(isiVariabel); } catch (e) { isiVariabel = {}; }
+        }
+
+        if (data.items) {
+          setDokumenItem(data.items);
+        }
+
+        ambilVariabelTemplate(data.template_id, isiVariabel);
+
+        setFormData(prevData => ({
+            ...prevData,      
+            ...isiVariabel    
+        }));
+      })
+      .catch(err => {
+        console.error("Gagal memuat detail siap cetak:", err);
+        setLoadingFetch(false); 
+      });
+  };
+
+  const ambilDetailArsip = (arsipId) => {
+    setLoadingFetch(true);
+    const token = localStorage.getItem('token');
+
+    axios.get(`http://localhost:8000/api/arsip/${arsipId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      }
+    })
+      .then(res => {
+        const data = res.data.data || res.data;
+        
+        setNamaDraft(data.nama_dokumen || data.nama_draft);
+        setCurrentTemplateId(data.template_id);
+
+        let isiVariabel = data.variables || data.data_input || {};
+        
+        if (typeof isiVariabel === 'string') {
+          try { isiVariabel = JSON.parse(isiVariabel); } catch (e) { isiVariabel = {}; }
+        }
+
+        if (data.items) {
+          setDokumenItem(data.items);
+        }
+
+        ambilVariabelTemplate(data.template_id, isiVariabel);
+
+        setFormData(prevData => ({
+            ...prevData,
+            ...isiVariabel
+        }));
+      })
+      .catch(err => {
+        console.error("Gagal memuat detail arsip:", err);
         setLoadingFetch(false);
       });
   };
@@ -156,6 +247,7 @@ function DraftSuratTugas() {
           const dd = String(dataLama.tanggal || '').padStart(2, '0');
           
           setCalendarDate(`${yyyy}-${mm}-${dd}`);
+          setLoadingFetch(false);
         } else {
           listVariabel.forEach(variable => {
             initialFormState[variable] = ''; 
@@ -177,29 +269,28 @@ function DraftSuratTugas() {
 
           setCalendarDate(tglString);
           setNamaDraft(`${namaTemplate} - ${hariIni.getDate()}/${hariIni.getMonth() + 1}/${yyyy}`);
+        
+          axios.get('http://localhost:8000/api/next-counter', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            }
+          })
+          .then(counterRes => {
+            const nextNo = String(counterRes.data.next_counter || 1).padStart(3, '0');
+            initialFormState['no'] = nextNo; 
+            setFormData(initialFormState);
+            setLoadingFetch(false);
+          })
+          .catch(err => {
+            console.error("Gagal mengambil counter live, memakai data lokal:", err);
+            if (!initialFormState['no']) {
+              initialFormState['no'] = '001';
+            }
+            setFormData(initialFormState);
+            setLoadingFetch(false);
+          });
         }
-
-        axios.get('http://localhost:8000/api/next-counter', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
-        })
-        .then(counterRes => {
-          const nextNo = String(counterRes.data.next_counter || 1).padStart(3, '0');
-          initialFormState['no'] = nextNo; 
-          setFormData(initialFormState);
-          setLoadingFetch(false);
-        })
-        .catch(err => {
-          console.error("Gagal mengambil counter live, memakai data lokal:", err);
-          if (!initialFormState['no']) {
-            initialFormState['no'] = '001';
-          }
-          setFormData(initialFormState);
-          setLoadingFetch(false);
-        });
-
       })
       .catch(err => {
         console.error("Gagal men-scan template:", err);
@@ -248,7 +339,9 @@ function DraftSuratTugas() {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
 
-    if (['nama_karyawan', 'nama_pegawai', 'nama_pekerja'].includes(name)) {
+    const nameLower = name.toLowerCase();
+
+    if (['nama_karyawan', 'nama_pegawai', 'nama_pekerja'].includes(nameLower)) {
       if (value.trim() === '') {
         setFilteredKaryawan([]);
         setShowKaryawanDropdown(false);
@@ -261,7 +354,7 @@ function DraftSuratTugas() {
       }
     }
 
-    if (name === 'kepala_bidang') {
+    if (nameLower === 'kepala_bidang') {
       if (value.trim() === '') {
         setFilteredKepalaBidang([]);
         setShowKepalaBidangDropdown(false);
@@ -274,7 +367,7 @@ function DraftSuratTugas() {
       }
     }
 
-    if (name === 'kepala_cabang') {
+    if (nameLower === 'kepala_cabang') {
       if (value.trim() === '') {
         setFilteredKepalaCabang([]);
         setShowKepalaCabangDropdown(false);
@@ -309,25 +402,52 @@ function DraftSuratTugas() {
       const nilaiBidang = typeof karyawan.bidang === 'object' && karyawan.bidang !== null
         ? karyawan.bidang?.nama_bidang || ''
         : karyawan.bidang || '';
+        
+      const nilaiNpp = karyawan.npp || karyawan.NPP || '';
+      const nilaiTingkatPangkat = karyawan.tingkat_pangkat || karyawan.TINGKAT_PANGKAT || '';
+      const nilaiTingkatJabatan = karyawan.tingkat_jabatan || karyawan.TINGKAT_JABATAN || '';
       
       if (fields.includes('jabatan')) stateBaru['jabatan'] = nilaiJabatan;
+      if (fields.includes('JABATAN')) stateBaru['JABATAN'] = nilaiJabatan;
+
       if (fields.includes('bidang')) stateBaru['bidang'] = nilaiBidang;
+      if (fields.includes('BIDANG')) stateBaru['BIDANG'] = nilaiBidang;
+
+      if (fields.includes('npp')) stateBaru['npp'] = nilaiNpp;
+      if (fields.includes('NPP')) stateBaru['NPP'] = nilaiNpp;
+
+      if (fields.includes('tingkat_pangkat')) stateBaru['tingkat_pangkat'] = nilaiTingkatPangkat;
+      if (fields.includes('TINGKAT_PANGKAT')) stateBaru['TINGKAT_PANGKAT'] = nilaiTingkatPangkat;
+
+      if (fields.includes('tingkat_jabatan')) stateBaru['tingkat_jabatan'] = nilaiTingkatJabatan;
+      if (fields.includes('TINGKAT_JABATAN')) stateBaru['TINGKAT_JABATAN'] = nilaiTingkatJabatan;
       
       return stateBaru;
     });
     setShowKaryawanDropdown(false);
   };
 
-  const pilihKepalaBidang = (karyawan) => {
-    setFormData(prev => ({ ...prev, kepala_bidang: karyawan.nama_lengkap }));
+  const pilihKepalaBidang = (karyawan, targetFieldName) => {
+    setFormData(prev => {
+      const stateBaru = { ...prev, [targetFieldName]: karyawan.nama_lengkap };
+      
+      const nilaiJabatan = typeof karyawan.jabatan === 'object' && karyawan.jabatan !== null
+        ? karyawan.jabatan?.nama_jabatan || ''
+        : karyawan.jabatan || '';
+        
+      if (fields.includes('jabatan_bidang')) stateBaru['jabatan_bidang'] = nilaiJabatan;
+      if (fields.includes('JABATAN_BIDANG')) stateBaru['JABATAN_BIDANG'] = nilaiJabatan;
+      
+      return stateBaru;
+    });
     setShowKepalaBidangDropdown(false);
     if (karyawan.user_id || karyawan.id) {
       setPenanggungId(karyawan.user_id || karyawan.id);
     }
   };
 
-  const pilihKepalaCabang = (karyawan) => {
-    setFormData(prev => ({ ...prev, kepala_cabang: karyawan.nama_lengkap }));
+  const pilihKepalaCabang = (karyawan, targetFieldName) => {
+    setFormData(prev => ({ ...prev, [targetFieldName]: karyawan.nama_lengkap }));
     setShowKepalaCabangDropdown(false);
   };
 
@@ -354,7 +474,6 @@ function DraftSuratTugas() {
     return data;
   };
 
-  // ⚡ SIMPAN DRAFT -> NAVIGASI DENGAN QUERY PARAM HIGHLIGHT_ID
   const handleSaveDraft = (e) => {
     e.preventDefault();
     setLoadingDraft(true);
@@ -396,7 +515,6 @@ function DraftSuratTugas() {
     });
   };
 
-  // ⚡ KIRIM KE ANTREAN / SIAP CETAK -> DENGAN AWAIT & HIGHLIGHT MATCHING
   const handleSelesai = async (e) => {
     e.preventDefault();
     setLoadingSelesai(true);
@@ -443,6 +561,68 @@ function DraftSuratTugas() {
     }
   };
 
+  const handleUpdateSiapCetak = async (e) => {
+    e.preventDefault();
+    setLoadingSelesai(true);
+    const token = localStorage.getItem('token');
+    
+    try {
+      const payloadMultipart = generateMultipartData();
+      payloadMultipart.append('items', JSON.stringify(dokumen_item));
+      payloadMultipart.append('_method', 'PUT'); 
+
+      await axios.post(`http://localhost:8000/api/siap-cetak/${siapCetakIdParam}`, payloadMultipart, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+          'Accept': 'application/json'
+        }
+      });
+
+      setLoadingSelesai(false);
+      navigate(`/siap-cetak?highlight=${encodeURIComponent(siapCetakIdParam)}&tab=surat_tugas`, {
+        state: { 
+          highlightId: siapCetakIdParam,
+          highlight_id: siapCetakIdParam,
+          targetTab: 'surat_tugas'
+        }
+      });
+    } catch (err) {
+      console.error("Gagal update antrean cetak:", err);
+      setLoadingSelesai(false);
+    }
+  };
+
+  const handleUpdateArsip = async (e) => {
+    e.preventDefault();
+    setLoadingSelesai(true);
+    const token = localStorage.getItem('token');
+    
+    try {
+      const payloadMultipart = generateMultipartData();
+      payloadMultipart.append('items', JSON.stringify(dokumen_item));
+      payloadMultipart.append('_method', 'PUT'); 
+
+      await axios.post(`http://localhost:8000/api/arsip/${arsipIdParam}`, payloadMultipart, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+          'Accept': 'application/json'
+        }
+      });
+
+      setLoadingSelesai(false);
+      navigate(`/arsip?highlight=${encodeURIComponent(arsipIdParam)}`, {
+        state: { 
+          highlightId: arsipIdParam
+        }
+      });
+    } catch (err) {
+      console.error("Gagal update arsip:", err);
+      setLoadingSelesai(false);
+    }
+  };
+
   const formatLabel = (text) => {
     return text.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
@@ -469,9 +649,27 @@ function DraftSuratTugas() {
     let processedHTML = textContent;
 
     fields.forEach(variable => {
-      if (['bulan', 'tahun', 'tanggal', 'no'].includes(variable)) return;
+      if (['bulan', 'tahun', 'tanggal', 'no'].includes(variable.toLowerCase())) return;
       
-      if (variable.startsWith('foto_')) {
+      // LOGIKA KHUSUS PENANGANAN SCAN QR CODE
+      if (variable.toLowerCase() === 'scan') {
+        const namaCabang = formData.kepala_cabang || formData.KEPALA_CABANG || '...';
+        const namaBidang = formData.kepala_bidang || formData.KEPALA_BIDANG || '...';
+        const jabBidang = formData.jabatan_bidang || formData.JABATAN_BIDANG || formData.jabatan || '...';
+
+        // Rakit teks QR
+        const teksQR = `Disetujui oleh ${namaCabang} sebagai Kepala Cabang dan oleh ${namaBidang} sebagai ${jabBidang}`;
+        
+        // Pake QR API gratisan buat live preview instant
+        const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(teksQR)}`;
+        
+        const replacementQr = `<img src="${qrApiUrl}" alt="QR Approval" class="w-20 h-20 object-contain inline-block border border-slate-200 p-1 bg-white rounded shadow-xs" />`;
+        
+        processedHTML = processedHTML.replaceAll(`\${${variable}}`, replacementQr);
+        return;
+      }
+
+      if (variable.toLowerCase().startsWith('foto_')) {
         const filePreview = filePreviews[variable];
         const replacementPhoto = filePreview 
           ? `<img src="${filePreview}" class="max-w-[130px] max-h-[70px] object-contain rounded border border-sky-200 p-0.5 bg-white inline-block shadow-xs" />`
@@ -481,8 +679,13 @@ function DraftSuratTugas() {
       }
 
       let userValue = formData[variable];
+
+      // TAMBAHAN: Jika variabel adalah no_rab dan nilainya kosong, set jadi "-"
+      if (variable.toLowerCase() === 'no_rab' && (!userValue || userValue.trim() === '')) {
+        userValue = '-';
+      }
       
-      if (['tanggal_berangkat', 'tanggal_tiba'].includes(variable) && userValue) {
+      if (['tanggal_berangkat', 'tanggal_tiba', 'TANGGAL_BERANGKAT', 'TANGGAL_TIBA'].includes(variable) && userValue) {
         const [yy, mm, dd] = userValue.split('-');
         if (yy && mm && dd) userValue = `${dd}/${mm}/${yy}`;
       }
@@ -535,7 +738,7 @@ function DraftSuratTugas() {
           <header className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-black text-slate-800 tracking-tight">
-                {draftIdParam ? 'Edit Draft:' : 'Draft Baru:'}{' '}
+                {arsipIdParam ? 'Edit Arsip:' : siapCetakIdParam ? 'Edit Siap Cetak:' : draftIdParam ? 'Edit Draft:' : 'Draft Baru:'}{' '}
                 <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">
                   {templateInfo?.nama || 'Memuat...'}
                 </span>
@@ -559,7 +762,7 @@ function DraftSuratTugas() {
               
               {/* PANEL KIRI: FORM ISIAN DATA */}
               <div className="lg:col-span-7">
-                <form onSubmit={handleSelesai} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
+                <form onSubmit={arsipIdParam ? handleUpdateArsip : siapCetakIdParam ? handleUpdateSiapCetak : handleSelesai} className="bg-[#F4F8FC] md:bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     
@@ -578,15 +781,19 @@ function DraftSuratTugas() {
                     </div>
 
                     {fields
-                      .filter(v => v !== 'no' && v !== 'bulan' && v !== 'tahun' && v !== 'tanggal' && v !== 'hari')
+                      .filter(v => !['no', 'bulan', 'tahun', 'tanggal', 'hari', 'scan'].includes(v.toLowerCase()))
                       .map((variableName) => {
-                        const isKaryawanField = ['nama_karyawan', 'nama_pegawai', 'nama_pekerja'].includes(variableName);
-                        const isKepalaBidangField = variableName === 'kepala_bidang';
-                        const isKepalaCabangField = variableName === 'kepala_cabang';
-                        const isPhoto = variableName.startsWith('foto_');
+                        const namaVariabelLower = variableName.toLowerCase();
+                        const isKaryawanField = ['nama_karyawan', 'nama_pegawai', 'nama_pekerja'].includes(namaVariabelLower);
+                        const isKepalaBidangField = namaVariabelLower === 'kepala_bidang';
+                        const isKepalaCabangField = namaVariabelLower === 'kepala_cabang';
+                        const isPhoto = namaVariabelLower.startsWith('foto_');
                         
-                        const isDateInput = ['tanggal_berangkat', 'tanggal_tiba'].includes(variableName);
-                        const isTotalHariField = variableName === 'total_hari';
+                        const isDateInput = ['tanggal_berangkat', 'tanggal_tiba'].includes(namaVariabelLower);
+                        const isTotalHariField = namaVariabelLower === 'total_hari';
+                        
+                        // TAMBAHAN: Cek apakah ini form no_rab
+                        const isNoRab = namaVariabelLower === 'no_rab';
                         
                         return (
                           <div key={variableName} className={`flex flex-col gap-1.5 ${(isKaryawanField || isKepalaBidangField || isKepalaCabangField) ? 'relative' : ''} ${isPhoto ? 'md:col-span-2' : ''}`}>
@@ -632,7 +839,7 @@ function DraftSuratTugas() {
                                   }, 250);
                                 }}
                                 className={`border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs font-medium focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition-all ${isTotalHariField ? 'bg-sky-50/60 font-bold text-sky-700 border-sky-200' : 'bg-[#F4F8FC]/50 text-slate-700'}`} 
-                                required 
+                                required={!isNoRab} 
                               />
                             )}
 
@@ -651,7 +858,7 @@ function DraftSuratTugas() {
                             {isKepalaBidangField && showKepalaBidangDropdown && filteredKepalaBidang.length > 0 && (
                               <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1 custom-scrollbar">
                                 {filteredKepalaBidang.map(k => (
-                                  <button key={k.id} type="button" onMouseDown={() => pilihKepalaBidang(k)} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-colors">
+                                  <button key={k.id} type="button" onMouseDown={() => pilihKepalaBidang(k, variableName)} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-colors">
                                     {k.nama_lengkap} <span className="text-[10px] text-sky-600 font-normal">({(typeof k.jabatan === 'object' && k.jabatan !== null) ? k.jabatan?.nama_jabatan : (k.jabatan || 'Kabid')})</span>
                                   </button>
                                 ))}
@@ -662,44 +869,62 @@ function DraftSuratTugas() {
                             {isKepalaCabangField && showKepalaCabangDropdown && filteredKepalaCabang.length > 0 && (
                               <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-white border border-sky-100 rounded-2xl shadow-xl z-50 max-h-40 overflow-y-auto py-1 custom-scrollbar">
                                 {filteredKepalaCabang.map(k => (
-                                  <button key={k.id} type="button" onMouseDown={() => pilihKepalaCabang(k)} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-colors">
-                                    {k.nama_lengkap} <span className="text-[10px] text-blue-600 font-normal">({(typeof k.jabatan === 'object' && k.jabatan !== null) ? k.jabatan?.nama_jabatan : (k.jabatan || 'Pimpinan')})</span>
+                                  <button key={k.id} type="button" onMouseDown={() => pilihKepalaCabang(k, variableName)} className="w-full text-left px-4 py-2 text-xs hover:bg-sky-50 font-bold text-slate-700 block transition-colors">
+                                    {k.nama_lengkap} <span className="text-[10px] text-blue-600 font-normal">({(typeof k.jabatan === 'object' && k.jabatan !== null) ? k.jabatan?.nama_jabatan : (k.jabatan || 'Kacab')})</span>
                                   </button>
                                 ))}
                               </div>
                             )}
-
                           </div>
                         );
                       })}
                   </div>
 
-                  {/* TOMBOL AKSI METODE TERENKRIPSI HAK AKSES */}
                   <div className="pt-6 border-t border-sky-100 flex flex-col items-end gap-3">
-                    {isRestrictedPenanggung && (
+                    {isRestrictedPenanggung && !siapCetakIdParam && !arsipIdParam && (
                       <span className="text-[10px] text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-bold shadow-xs">
                         ⚠️ Akses Terbatas: Anda bukan pembuat asli dokumen ini, Anda hanya diizinkan memperbarui Draft.
                       </span>
                     )}
 
                     <div className="flex flex-wrap justify-end gap-3">
-                      <button 
-                        type="button" 
-                        onClick={handleSaveDraft} 
-                        disabled={loadingDraft || loadingSelesai} 
-                        className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
-                      >
-                        {loadingDraft ? 'Menyimpan...' : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'}
-                      </button>
-                      
-                      {!isRestrictedPenanggung && (
+                      {arsipIdParam ? (
                         <button 
                           type="submit" 
-                          disabled={loadingDraft || loadingSelesai} 
-                          className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
+                          disabled={loadingSelesai} 
+                          className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-emerald-200/50 hover:shadow-lg hover:shadow-emerald-300/60 disabled:opacity-50 cursor-pointer"
                         >
-                          {loadingSelesai ? 'Memproses...' : 'Selesai & Kirim Ke Antrean'}
+                          {loadingSelesai ? 'Memperbarui...' : '🔄 Update Arsip'}
                         </button>
+                      ) : siapCetakIdParam ? (
+                        <button 
+                          type="submit" 
+                          disabled={loadingSelesai} 
+                          className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-emerald-200/50 hover:shadow-lg hover:shadow-emerald-300/60 disabled:opacity-50 cursor-pointer"
+                        >
+                          {loadingSelesai ? 'Memperbarui...' : '🔄 Update Antrean Cetak'}
+                        </button>
+                      ) : (
+                        <>
+                          <button 
+                            type="button" 
+                            onClick={handleSaveDraft} 
+                            disabled={loadingDraft || loadingSelesai} 
+                            className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
+                          >
+                            {loadingDraft ? 'Menyimpan...' : draftIdParam ? '🔄 Perbarui Draft' : '📁 Simpan Draft'}
+                          </button>
+                          
+                          {!isRestrictedPenanggung && (
+                            <button 
+                              type="submit" 
+                              disabled={loadingDraft || loadingSelesai} 
+                              className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
+                            >
+                              {loadingSelesai ? 'Memproses...' : 'Selesai & Kirim Ke Antrean'}
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -709,26 +934,18 @@ function DraftSuratTugas() {
 
               {/* PANEL KANAN: LIVE PREVIEW DOKUMEN */}
               <div className="lg:col-span-5 bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-6 sticky top-6 h-[calc(100vh-140px)] flex flex-col">
-                <div className="flex items-center justify-between pb-3.5 border-b border-sky-100/80 mb-3">
+                <div className="flex items-center justify-between pb-4 border-b border-sky-100/80 mb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-base">📄</span>
                     <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Live Document Preview</h3>
                   </div>
-                  <span className="text-[10px] bg-sky-50 text-sky-600 font-bold px-2.5 py-1 rounded-full border border-sky-100">Auto Sync</span>
+                  <span className="text-[10px] bg-blue-600 text-white font-bold px-3 py-1 rounded-full shadow-md">
+                    Auto Sync
+                  </span>
                 </div>
 
-                <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-3.5 mb-3 flex items-start gap-2.5 text-[11px] leading-relaxed text-sky-950 font-medium">
-                  <span className="text-sm mt-0.5">💡</span>
-                  <div>
-                    <strong className="text-sky-900 font-bold">Sistem Nomor Dokumen:</strong> Nomor surat yang tertera di live preview saat ini hanyalah <strong className="text-sky-700">contoh/estimasi sementara</strong>. Nomor resmi akan disesuaikan otomatis saat dicetak.
-                  </div>
-                </div>
-
-                {/* AREA LEMBAR KERTAS PREVIEW REALISTIS */}
-                <div className="flex-1 overflow-y-auto border border-sky-100/80 rounded-2xl bg-slate-100/70 p-4 shadow-inner custom-scrollbar">
-                  <div className="bg-white rounded-xl border border-slate-200/80 shadow-md p-6 min-h-full">
-                    {renderLivePreview()}
-                  </div>
+                <div className="flex-1 overflow-y-auto border border-sky-100/80 rounded-2xl bg-white p-6 shadow-inner custom-scrollbar">
+                  {renderLivePreview()}
                 </div>
               </div>
 

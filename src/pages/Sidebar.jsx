@@ -1,24 +1,34 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 function Sidebar() {
   const globalFont = { fontFamily: "'Poppins', sans-serif" };
   const navigate = useNavigate(); 
   const location = useLocation(); 
 
-  // 🚪 FUNGSI LOGOUT (Dari Sidebar - Copy): Bersihkan data & langsung pindah rute secara fisik ke /login
+  const auth = useAuth();
+  
+  // Ambil role dari Context atau localStorage sebagai cadangan
+  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const rawRole = auth?.role || auth?.user?.role || storedUser?.role || localStorage.getItem('role') || '';
+  const userRole = String(rawRole).toLowerCase().trim();
+
   const handleLogout = () => {
-    localStorage.clear(); 
-    window.location.href = '/login'; 
+    // 1. Bersihkan semua storage
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // 2. Panggil auth logout jika ada
+    if (auth?.logoutUser) auth.logoutUser();
+    else if (auth?.logout) auth.logout();
+
+    // 3. Hard redirect ke /login
+    window.location.href = '/login';
   };
 
-  // 👑 Mengambil role user yang sedang login dari localStorage (Dari Sidebar - Copy)
-  const userRole = localStorage.getItem('role'); 
-  const userRoleLower = userRole ? String(userRole).toLowerCase().trim() : '';
-
-  // 🌟 FIX LOGIKA REDIRECT (Dari Sidebar - Copy): Arahkan ke halaman dashboard yang pas dengan role-nya
   const handleDashboardRedirect = () => {
-    if (userRole === 'master_admin') {
+    if (userRole === 'master_admin' || userRole === 'master admin' || userRole === 'master_user') {
       navigate('/master-dashboard');
     } else if (userRole === 'admin') {
       navigate('/admin-dashboard');
@@ -27,17 +37,8 @@ function Sidebar() {
     }
   };
 
-  // STYLE FUNGSI (Dari Sidebar asli)
   const getMenuClass = (path) => {
-    // Menyesuaikan logika aktif dari Sidebar - Copy (termasuk root '/')
-    const isDashboardPath = path === '/dashboard' && (
-      location.pathname === '/dashboard' || 
-      location.pathname === '/admin-dashboard' || 
-      location.pathname === '/master-dashboard' || 
-      location.pathname === '/'
-    );
-
-    const isActive = isDashboardPath || location.pathname === path;
+    const isActive = location.pathname === path;
     const baseClass = "w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl cursor-pointer text-sm transition-transform duration-150 active:scale-95 select-none";
     
     if (isActive) {
@@ -47,15 +48,15 @@ function Sidebar() {
     return `${baseClass} text-slate-600 font-semibold hover:bg-white hover:text-sky-600 hover:shadow-xs border border-transparent hover:border-sky-100/60`;
   };
 
-  // Menentukan apakah user adalah admin atau master_admin
-  const isAdminOrMaster = ['admin', 'master_admin', 'master admin'].includes(userRoleLower);
+  // Cek apakah role termasuk admin, master admin, atau master user
+  const isAdminOrMaster = ['admin', 'master_admin', 'master admin', 'master_user', 'master user'].includes(userRole);
 
   return (
     <aside 
       className="w-64 bg-[#F4F8FC] border-r border-sky-100 flex flex-col h-full overflow-hidden shadow-xs"
       style={globalFont}
     >
-      {/* LOGO AREA (Dari Sidebar asli) */}
+      {/* LOGO AREA */}
       <div className="pt-7 pb-5 px-6 flex flex-col items-center justify-center text-center gap-2.5 select-none mb-2">
         <img 
           src="/logo-sucofindo.png" 
@@ -67,24 +68,26 @@ function Sidebar() {
         </h1>
       </div>
 
-      {/* NAVIGATION (Style dari Sidebar asli) */}
+      {/* NAVIGATION */}
       <nav className="flex-1 px-4 space-y-3 overflow-y-auto custom-scrollbar">
         
-        {/* Menu Utama */}
+        {/* MENU UTAMA */}
         <div className="space-y-1.5">
           <p className="text-[10px] font-black text-sky-800 uppercase tracking-[0.15em] px-4 mb-2 select-none">
             Menu Utama
           </p>
           
           <button 
+            type="button"
             onClick={handleDashboardRedirect}
-            className={getMenuClass('/dashboard')} 
+            className={getMenuClass('/dashboard')}
           >
             <span className="text-base">🏠</span>
             <span>Dashboard</span>
           </button>
           
           <button 
+            type="button"
             onClick={() => navigate('/file-template')} 
             className={getMenuClass('/file-template')}
           >
@@ -93,6 +96,7 @@ function Sidebar() {
           </button>
 
           <button 
+            type="button"
             onClick={() => navigate('/draft-dokumen')} 
             className={getMenuClass('/draft-dokumen')}
           >
@@ -108,6 +112,7 @@ function Sidebar() {
           </p>
           
           <button 
+            type="button"
             onClick={() => navigate('/siap-cetak')}
             className={getMenuClass('/siap-cetak')}
           >
@@ -115,22 +120,49 @@ function Sidebar() {
             <span>Siap Cetak</span>
           </button>
 
+          {/* ARSIP PRIBADI (Semua User Bisa Akses) */}
           <button 
+            type="button"
             onClick={() => navigate('/arsip-history')}
             className={getMenuClass('/arsip-history')}
           >
             <span className="text-base">📚</span>
-            <span>Arsip & History</span>
+            <span>Arsip Pribadi</span>
           </button>
+
+          {/* ARSIP DOKUMEN (Khusus Admin & Master Admin) */}
+          {isAdminOrMaster && (
+            <button 
+              type="button"
+              onClick={() => navigate('/arsip-dokumen')}
+              className={getMenuClass('/arsip-dokumen')}
+            >
+              <span className="text-base">🗄️</span>
+              <span>Arsip Dokumen</span>
+            </button>
+          )}
+
+          {/* Panduan User untuk User Biasa (Hanya muncul jika BUKAN Admin/Master) */}
+          {!isAdminOrMaster && (
+            <button 
+              type="button"
+              onClick={() => navigate('/panduan-user')} 
+              className={getMenuClass('/panduan-user')}
+            >
+              <span className="text-base">📖</span>
+              <span>Panduan User</span>
+            </button>
+          )}
         </div>
 
-        {/* MONITORING DATA (Logic dari Copy, Style dari Asli) */}
+        {/* MONITORING DATA (Khusus Admin / Master) */}
         {isAdminOrMaster && (
           <div className="pt-3 space-y-1.5 border-t border-sky-100/80">
             <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] px-4 mb-2 select-none">
               Supervision
             </p>
             <button 
+              type="button"
               onClick={() => navigate('/monitoring-data')} 
               className={getMenuClass('/monitoring-data')}
             >
@@ -140,27 +172,39 @@ function Sidebar() {
           </div>
         )}
 
-        {/* MANAGEMENT DATA (Logic dari Copy, Style dari Asli) */}
+        {/* MANAGEMENT USER & PANDUAN USER (Khusus Admin / Master) */}
         {isAdminOrMaster && (
           <div className="pt-3 space-y-1.5 border-t border-sky-100/80">
             <p className="text-[10px] font-black text-sky-600 uppercase tracking-[0.2em] px-4 mb-2 select-none">
               Administration
             </p>
             <button 
+              type="button"
               onClick={() => navigate('/management-data')} 
               className={getMenuClass('/management-data')}
             >
               <span className="text-base">⚙️</span>
-              <span>Management Data</span>
+              <span>Management User</span>
+            </button>
+
+            {/* Panduan User untuk Admin/Master Admin */}
+            <button 
+              type="button"
+              onClick={() => navigate('/panduan-user')} 
+              className={getMenuClass('/panduan-user')}
+            >
+              <span className="text-base">📖</span>
+              <span>Panduan User</span>
             </button>
           </div>
         )}
 
       </nav>
 
-      {/* LOGOUT (Style dari Sidebar asli) */}
+      {/* LOGOUT */}
       <div className="p-4 border-t border-sky-100/80">
         <button 
+          type="button"
           onClick={handleLogout}
           className="w-full flex items-center justify-center gap-3 py-2.5 rounded-2xl text-rose-500 hover:bg-rose-50 font-bold text-sm transition-transform duration-150 active:scale-95 cursor-pointer border border-transparent hover:border-rose-100 select-none"
         >
