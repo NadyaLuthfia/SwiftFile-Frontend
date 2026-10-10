@@ -8,6 +8,8 @@ function DraftTorJasa() {
   const [searchParams] = useSearchParams();
   const templateId = searchParams.get('template_id');
   const draftId = searchParams.get('draft_id') || searchParams.get('id');
+  const siapCetakIdParam = searchParams.get('siap_cetak_id');
+  const arsipIdParam = searchParams.get('arsip_id');
 
   // State Template ID
   const [savedTemplateId, setSavedTemplateId] = useState(templateId || '');
@@ -19,9 +21,9 @@ function DraftTorJasa() {
   // State Form Utama
   const [formData, setFormData] = useState({
     pengadaan: '',
-    nama_penyerah: '',
+    nama_peninjau: '',
     bidang1: '',
-    nama_penerima: '',
+    nama_penyetuju: '',
     bidang2: ''
   });
 
@@ -54,15 +56,22 @@ function DraftTorJasa() {
     fetchPegawai();
   }, []);
 
-  // 2. Auto-Fill Data Saat Edit Draft
+  // 2. Auto-Fill Data Saat Edit Draft / Siap Cetak / Arsip
   useEffect(() => {
-    if (!draftId) return;
+    if (!draftId && !siapCetakIdParam && !arsipIdParam) return;
 
-    const fetchDetailDraft = async () => {
+    const fetchDetail = async () => {
       setLoading(true);
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get(`http://localhost:8000/api/drafts/${draftId}`, {
+        let endpoint = `http://localhost:8000/api/drafts/${draftId}`;
+        if (siapCetakIdParam) {
+          endpoint = `http://localhost:8000/api/siap-cetak/${siapCetakIdParam}`;
+        } else if (arsipIdParam) {
+          endpoint = `http://localhost:8000/api/arsip/${arsipIdParam}`;
+        }
+
+        const res = await axios.get(endpoint, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -72,16 +81,16 @@ function DraftTorJasa() {
           setSavedTemplateId(data.template_id);
         }
 
-        let input = data.data_input || data.variables || {};
+        let input = data.variables || data.data_input || {};
         if (typeof input === 'string') {
           try { input = JSON.parse(input); } catch (e) { input = {}; }
         }
 
         setFormData({
           pengadaan: data.pengadaan || input.pengadaan || input.tujuan_pengadaan || input.TUJUAN_PENGADAAN || '',
-          nama_penyerah: data.nama_penyerah || input.nama_penyerah || '',
+          nama_peninjau: data.nama_peninjau || input.nama_peninjau || data.nama_penyerah || input.nama_penyerah || '',
           bidang1: data.bidang1 || input.bidang1 || '',
-          nama_penerima: data.nama_penerima || input.nama_penerima || '',
+          nama_penyetuju: data.nama_penyetuju || input.nama_penyetuju || data.nama_penerima || input.nama_penerima || '',
           bidang2: data.bidang2 || input.bidang2 || ''
         });
 
@@ -97,14 +106,14 @@ function DraftTorJasa() {
         });
 
       } catch (err) {
-        console.error("Gagal mengambil detail draft:", err);
+        console.error("Gagal mengambil detail dokumen:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchDetailDraft();
-  }, [draftId]);
+    fetchDetail();
+  }, [draftId, siapCetakIdParam, arsipIdParam]);
 
   const getFilteredPegawai = (query) => {
     if (!query?.trim()) return [];
@@ -119,8 +128,8 @@ function DraftTorJasa() {
     const bidang = karyawan.bidang?.nama_bidang || karyawan.bidang || karyawan.nama_bidang || '';
     setFormData(prev => ({
       ...prev,
-      [target === 'penyerah' ? 'nama_penyerah' : 'nama_penerima']: nama,
-      [target === 'penyerah' ? 'bidang1' : 'bidang2']: bidang,
+      [target === 'peninjau' ? 'nama_peninjau' : 'nama_penyetuju']: nama,
+      [target === 'peninjau' ? 'bidang1' : 'bidang2']: bidang,
     }));
     setActiveDropdown(null);
   };
@@ -168,13 +177,15 @@ function DraftTorJasa() {
       tujuan_pengadaan: formData.pengadaan,
       TUJUAN_PENGADAAN: formData.pengadaan,
 
-      nama_penyerah: formData.nama_penyerah,
-      NAMA_PENYERAH: formData.nama_penyerah,
+      nama_peninjau: formData.nama_peninjau,
+      NAMA_PENINJAU: formData.nama_peninjau,
+      nama_penyerah: formData.nama_peninjau, // Fallback
       bidang1: formData.bidang1,
       BIDANG1: formData.bidang1,
       
-      nama_penerima: formData.nama_penerima,
-      NAMA_PENERIMA: formData.nama_penerima,
+      nama_penyetuju: formData.nama_penyetuju,
+      NAMA_PENYETUJU: formData.nama_penyetuju,
+      nama_penerima: formData.nama_penyetuju, // Fallback
       bidang2: formData.bidang2,
       BIDANG2: formData.bidang2,
       
@@ -240,7 +251,6 @@ function DraftTorJasa() {
       const savedId = res.data?.data?.id || res.data?.id || draftId;
       setLoading(false);
 
-      // Meluncur ke tab TOR Jasa & menyorot item draf yang baru disimpan
       navigate('/draft-dokumen', {
         state: { 
           targetTab: 'tor_jasa',
@@ -255,7 +265,7 @@ function DraftTorJasa() {
     });
   };
 
-  // Submit Final (Siap Cetak)
+  // Submit Final (Siap Cetak Baru)
   const handleSubmit = (e) => {
     e.preventDefault();
     setLoading(true);
@@ -300,6 +310,86 @@ function DraftTorJasa() {
     });
   };
 
+  // Update Siap Cetak (Saat Edit dari Halaman Siap Cetak)
+  const handleUpdateSiapCetak = (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const payload = createFormDataPayload('siap_cetak');
+    payload.append('_method', 'PUT');
+    const token = localStorage.getItem('token');
+
+    axios.post(`http://localhost:8000/api/siap-cetak/${siapCetakIdParam}`, payload, {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      }
+    })
+    .then(() => {
+      setLoading(false);
+      navigate(`/siap-cetak?highlight=${encodeURIComponent(siapCetakIdParam)}&tab=tor_jasa`, {
+        state: { 
+          tab: 'tor_jasa',
+          activeTab: 'tor_jasa',
+          targetTab: 'tor_jasa',
+          highlightId: siapCetakIdParam,
+          highlight_id: siapCetakIdParam
+        }
+      });
+    })
+    .catch(err => {
+      console.error("Gagal update antrean cetak:", err);
+      const serverMsg = err.response?.data?.message || err.response?.data?.errors?.variables?.[0];
+      alert(serverMsg || "Gagal memperbarui dokumen siap cetak.");
+      setLoading(false);
+    });
+  };
+
+  // Update Arsip (Saat Edit dari Halaman Arsip)
+  const handleUpdateArsip = (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const payload = createFormDataPayload('arsip');
+    payload.append('_method', 'PUT');
+    const token = localStorage.getItem('token');
+
+    axios.post(`http://localhost:8000/api/arsip/${arsipIdParam}`, payload, {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      }
+    })
+    .then(() => {
+      setLoading(false);
+      // Simpan data highlight ke sessionStorage agar aman jika di-refresh
+      sessionStorage.setItem('active_arsip_highlight', JSON.stringify({
+        highlightId: arsipIdParam,
+        targetTab: 'tor_jasa',
+        timestamp: Date.now()
+      }));
+
+      // Navigasi ke Arsip Dokumen dengan state & query params
+      navigate(`/arsip-dokumen?highlight=${encodeURIComponent(arsipIdParam)}&tab=tor_jasa`, {
+        state: { 
+          tab: 'tor_jasa',
+          activeTab: 'tor_jasa',
+          targetTab: 'tor_jasa',
+          highlightId: arsipIdParam,
+          highlight_id: arsipIdParam
+        }
+      });
+    })
+    .catch(err => {
+      console.error("Gagal update arsip:", err);
+      const serverMsg = err.response?.data?.message || err.response?.data?.errors?.variables?.[0];
+      alert(serverMsg || "Gagal memperbarui arsip dokumen.");
+      setLoading(false);
+    });
+  };
+
   const renderKaryawanDropdown = (type, query) => {
     if (activeDropdown !== type) return null;
     const list = getFilteredPegawai(query);
@@ -331,13 +421,13 @@ function DraftTorJasa() {
           {/* HEADER */}
           <header className="flex justify-between items-center">
             <h1 className="text-3xl font-black text-slate-800 tracking-tight">
-              {draftId ? 'Edit Draft:' : 'Draft Baru:'}{' '}
+              {arsipIdParam ? 'Edit Arsip:' : siapCetakIdParam ? 'Edit Siap Cetak:' : draftId ? 'Edit Draft:' : 'Draft Baru:'}{' '}
               <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">
                 TOR Jasa
               </span>
             </h1>
             <button 
-              onClick={() => navigate('/draft-dokumen')} 
+              onClick={() => navigate(-1)} 
               className="text-xs font-bold text-sky-700 bg-sky-50/80 hover:bg-sky-100 px-4 py-2.5 rounded-2xl border border-sky-100/80 transition-all transform hover:scale-105 active:scale-95 shadow-xs cursor-pointer flex items-center gap-1.5"
             >
               ⬅️ Kembali
@@ -348,7 +438,7 @@ function DraftTorJasa() {
             
             {/* PANEL KIRI FORM */}
             <div className="lg:col-span-7">
-              <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
+              <form onSubmit={arsipIdParam ? handleUpdateArsip : siapCetakIdParam ? handleUpdateSiapCetak : handleSubmit} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                 
                 <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-sky-950 font-medium">
                   <span>🤖</span>
@@ -475,23 +565,23 @@ function DraftTorJasa() {
                   <div className="p-4 rounded-2xl bg-[#F4F8FC]/50 border border-sky-100/80 space-y-3">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div className="relative">
-                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Penyerah</label>
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Peninjau</label>
                         <input 
                           type="text" 
-                          name="nama_penyerah" 
-                          value={formData.nama_penyerah} 
+                          name="nama_peninjau" 
+                          value={formData.nama_peninjau} 
                           onChange={handleFormChange} 
-                          onFocus={() => setActiveDropdown('penyerah')} 
+                          onFocus={() => setActiveDropdown('peninjau')} 
                           onBlur={() => setTimeout(() => setActiveDropdown(null), 200)} 
-                          placeholder="Ketik nama penyerah..." 
+                          placeholder="Ketik nama peninjau..." 
                           className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" 
                           autoComplete="off" 
                         />
-                        {renderKaryawanDropdown('penyerah', formData.nama_penyerah)}
+                        {renderKaryawanDropdown('peninjau', formData.nama_peninjau)}
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Bidang Penyerah</label>
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Bidang Peninjau</label>
                         <input 
                           type="text" 
                           name="bidang1" 
@@ -503,23 +593,23 @@ function DraftTorJasa() {
                       </div>
 
                       <div className="relative">
-                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Penerima</label>
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Penyetuju</label>
                         <input 
                           type="text" 
-                          name="nama_penerima" 
-                          value={formData.nama_penerima} 
+                          name="nama_penyetuju" 
+                          value={formData.nama_penyetuju} 
                           onChange={handleFormChange} 
-                          onFocus={() => setActiveDropdown('penerima')} 
+                          onFocus={() => setActiveDropdown('penyetuju')} 
                           onBlur={() => setTimeout(() => setActiveDropdown(null), 200)} 
-                          placeholder="Ketik nama penerima..." 
+                          placeholder="Ketik nama penyetuju..." 
                           className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" 
                           autoComplete="off" 
                         />
-                        {renderKaryawanDropdown('penerima', formData.nama_penerima)}
+                        {renderKaryawanDropdown('penyetuju', formData.nama_penyetuju)}
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Bidang Penerima</label>
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Bidang Penyetuju</label>
                         <input 
                           type="text" 
                           name="bidang2" 
@@ -535,21 +625,41 @@ function DraftTorJasa() {
 
                 {/* ACTION BUTTONS */}
                 <div className="pt-6 border-t border-sky-100/80 flex flex-wrap justify-end gap-3">
-                  <button 
-                    type="button" 
-                    onClick={handleSaveDraft} 
-                    disabled={loading} 
-                    className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
-                  >
-                    {loading ? "Menyimpan..." : "📁 Simpan Draft"}
-                  </button>
-                  <button 
-                    type="submit" 
-                    disabled={loading} 
-                    className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
-                  >
-                    {loading ? "Memproses..." : "Selesai & Kirim Ke Antrean"}
-                  </button>
+                  {arsipIdParam ? (
+                    <button 
+                      type="submit" 
+                      disabled={loading} 
+                      className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-emerald-200/50 hover:shadow-lg hover:shadow-emerald-300/60 disabled:opacity-50 cursor-pointer"
+                    >
+                      {loading ? "Memperbarui..." : "🔄 Update Arsip"}
+                    </button>
+                  ) : siapCetakIdParam ? (
+                    <button 
+                      type="submit" 
+                      disabled={loading} 
+                      className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-emerald-200/50 hover:shadow-lg hover:shadow-emerald-300/60 disabled:opacity-50 cursor-pointer"
+                    >
+                      {loading ? "Memperbarui..." : "🔄 Update Antrean Cetak"}
+                    </button>
+                  ) : (
+                    <>
+                      <button 
+                        type="button" 
+                        onClick={handleSaveDraft} 
+                        disabled={loading} 
+                        className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
+                      >
+                        {loading ? "Menyimpan..." : "📁 Simpan Draft"}
+                      </button>
+                      <button 
+                        type="submit" 
+                        disabled={loading} 
+                        className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
+                      >
+                        {loading ? "Memproses..." : "Selesai & Kirim Ke Antrean"}
+                      </button>
+                    </>
+                  )}
                 </div>
 
               </form>
@@ -628,12 +738,12 @@ function DraftTorJasa() {
                 <div className="border-t pt-4 grid grid-cols-2 gap-4 text-center text-[11px]">
                   <div>
                     <p className="font-medium mb-12">Disiapkan/ditinjau oleh,</p>
-                    <p className="font-bold underline font-mono">{formData.nama_penyerah || '${nama_penyerah}'}</p>
+                    <p className="font-bold underline font-mono">{formData.nama_peninjau || '${nama_peninjau}'}</p>
                     <p className="font-mono text-slate-600">{formData.bidang1 || '${bidang1}'}</p>
                   </div>
                   <div>
                     <p className="font-medium mb-12">Disetujui/disahkan oleh,</p>
-                    <p className="font-bold underline font-mono">{formData.nama_penerima || '${nama_penerima}'}</p>
+                    <p className="font-bold underline font-mono">{formData.nama_penyetuju || '${nama_penyetuju}'}</p>
                     <p className="font-mono text-slate-600">{formData.bidang2 || '${bidang2}'}</p>
                   </div>
                 </div>

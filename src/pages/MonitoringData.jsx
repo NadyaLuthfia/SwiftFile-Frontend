@@ -34,8 +34,11 @@ function MonitoringData() {
   // 🌟 STATE SUB-TAB FILTER STATUS BERKAS (Aktif / Nonaktif / Semua)
   const [filterStatus, setFilterStatus] = useState('aktif');
 
-  // STATE UNTUK PRINTING & HIGHLIGHT GLOW
-  const [printingId, setPrintingId] = useState(null);
+  // STATE UNTUK PREVIEW MODAL & HIGHLIGHT GLOW
+  const [isLoadingPreview, setIsLoadingPreview] = useState(null);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
+  const [modalPreviewTerbuka, setModalPreviewTerbuka] = useState(false);
+
   const [activeHighlight, setActiveHighlight] = useState(null);
   const highlightedRef = useRef(null);
 
@@ -89,15 +92,13 @@ function MonitoringData() {
     }
   };
 
-  const handlePrintFisik = async (id) => {
-    setPrintingId(id);
+  // 👁️ FUNGSI PREVIEW DOKUMEN ARSIR (DISAMAKAN DENGAN ARSIP DOKUMEN)
+  const handlePreviewFisik = async (id) => {
+    setIsLoadingPreview(id);
     const token = localStorage.getItem('token');
 
     try {
-      const response = await axios.post(`${BASE_URL}/siap-cetak/${id}/cetak-lagi`, {
-        copies: 1,
-        pages: 'All'
-      }, {
+      const response = await axios.get(`${BASE_URL}/arsip-history/${id}/preview`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
@@ -105,17 +106,17 @@ function MonitoringData() {
       });
 
       if (response.data && response.data.pdf_url) {
-        window.open(response.data.pdf_url, '_blank');
-        triggerSuccessModal('Mencetak PDF', 'Dokumen siap dicetak dalam tab baru.');
+        setPreviewPdfUrl(response.data.pdf_url);
+        setModalPreviewTerbuka(true);
         fetchAllFilesForMonitoring();
       } else {
-        triggerErrorModal('URL Tidak Ditemukan', 'Dokumen berhasil dipproses, namun URL PDF tidak ditemukan.');
+        triggerErrorModal('URL Tidak Ditemukan', 'Dokumen berhasil diproses, namun URL PDF tidak ditemukan.');
       }
     } catch (error) {
-      console.error("Gagal melakukan konversi PDF:", error);
-      triggerErrorModal('Gagal Cetak', 'Terjadi kesalahan sistem saat mencoba mengonversi/mencetak dokumen.');
+      console.error("Gagal memuat preview PDF:", error);
+      triggerErrorModal('Gagal Preview', 'Terjadi kesalahan sistem saat mencoba memuat preview dokumen.');
     } finally {
-      setPrintingId(null);
+      setIsLoadingPreview(null);
     }
   };
 
@@ -683,11 +684,11 @@ function MonitoringData() {
                       <div className="shrink-0 flex items-center justify-end gap-2 w-[240px]">
                         <button
                           type="button"
-                          disabled={printingId === file.id}
-                          onClick={() => handlePrintFisik(file.id)}
-                          className="bg-slate-900 hover:bg-black text-white px-3.5 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-xs cursor-pointer whitespace-nowrap select-none active:scale-95 disabled:opacity-50"
+                          disabled={isLoadingPreview === file.id}
+                          onClick={() => handlePreviewFisik(file.id)}
+                          className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white px-3.5 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-xs cursor-pointer whitespace-nowrap select-none active:scale-95 disabled:opacity-50 flex items-center gap-1"
                         >
-                          {printingId === file.id ? 'Mengonversi PDF...' : '🖨️ CETAK FISIK'}
+                          {isLoadingPreview === file.id ? '⏳ MEMUAT...' : '👁️ PREVIEW'}
                         </button>
 
                         {/* HANYA MASTER ADMIN YANG MEMILIKI TOMBOL NONAKTIFKAN / AKTIFKAN */}
@@ -717,6 +718,52 @@ function MonitoringData() {
 
         </div>
       </main>
+
+      {/* MODAL PREVIEW PDF DOKUMEN */}
+      {modalPreviewTerbuka && previewPdfUrl && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all">
+          <div className="bg-white rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl border border-sky-100 overflow-hidden animate-pop">
+            
+            <div className="flex justify-between items-center px-6 py-4 border-b border-sky-100 bg-[#F4F8FC]">
+              <div className="flex items-center gap-3">
+                <span className="bg-sky-100 text-sky-600 p-2 rounded-xl text-lg">📄</span>
+                <div>
+                  <h3 className="text-sm font-black text-slate-800">Preview Dokumen</h3>
+                  <p className="text-[10px] text-slate-500 font-medium">Pratinjau langsung tanpa berpindah halaman</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => window.open(previewPdfUrl, '_blank')}
+                  className="text-[11px] font-bold text-sky-600 bg-sky-50 hover:bg-sky-100 px-4 py-2 rounded-xl transition-colors border border-sky-100 cursor-pointer"
+                >
+                  ↗ Cetak Dokumen
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setModalPreviewTerbuka(false);
+                    setPreviewPdfUrl(null);
+                  }}
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-4 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer select-none"
+                >
+                  ✕ Tutup
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 bg-slate-200/50 p-2">
+              <iframe 
+                src={`${previewPdfUrl}#toolbar=0`} 
+                className="w-full h-full rounded-2xl border border-slate-200 shadow-inner bg-white" 
+                title="Preview Dokumen"
+              />
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* MODAL DETAIL DOKUMEN */}
       {selectedFileForModal && (

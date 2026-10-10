@@ -7,22 +7,24 @@ function DraftTorBarang() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const templateId = searchParams.get('template_id');
-  const draftId = searchParams.get('draft_id') || searchParams.get('id'); // ID untuk mode edit
+  const draftId = searchParams.get('draft_id') || searchParams.get('id'); // ID untuk mode edit draft
+  const siapCetakIdParam = searchParams.get('siap_cetak_id'); // ID untuk edit dari Siap Cetak
+  const arsipIdParam = searchParams.get('arsip_id'); // ID untuk edit dari Arsip
 
   // 1. State simpan templateId dari backend
   const [savedTemplateId, setSavedTemplateId] = useState(templateId || '');
 
   const [loading, setLoading] = useState(false);
   const [daftarPegawai, setDaftarPegawai] = useState([]);
-  const [activeDropdown, setActiveDropdown] = useState(null); // 'penyerah' | 'penerima' | null
+  const [activeDropdown, setActiveDropdown] = useState(null); // 'peninjau' | 'penyetuju' | null
 
   // State Form Utama
   const [formData, setFormData] = useState({
     nama_draft: '',
     pengadaan: '',
-    nama_penyerah: '',
+    nama_peninjau: '',
     bidang1: '',
-    nama_penerima: '',
+    nama_penyetuju: '',
     bidang2: ''
   });
 
@@ -41,6 +43,16 @@ function DraftTorBarang() {
   const [itemsRincian, setItemsRincian] = useState([
     { barang: '', foto_file: null, foto_preview: null, foto_path: '', qty: '1', satuan: 'Pcs', harga_satuan: '', total: '' }
   ]);
+
+  const grandTotalRincian = itemsRincian.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
+
+  // Auto-update jumlah_harga dari grandTotalRincian tabel rincian barang
+  useEffect(() => {
+    setItemBarang(prev => ({
+      ...prev,
+      jumlah_harga: grandTotalRincian.toString()
+    }));
+  }, [itemsRincian]);
 
   // Cleanup Object URL Blob saat komponen ditutup
   useEffect(() => {
@@ -70,15 +82,22 @@ function DraftTorBarang() {
     fetchPegawai();
   }, []);
 
-  // Auto-Fill Data Saat Mode Edit Draft
+  // Auto-Fill Data Saat Mode Edit (Draft / Siap Cetak / Arsip)
   useEffect(() => {
-    if (!draftId) return;
+    if (!draftId && !siapCetakIdParam && !arsipIdParam) return;
 
-    const fetchDetailDraft = async () => {
+    const fetchDetail = async () => {
       setLoading(true);
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get(`http://localhost:8000/api/drafts/${draftId}`, {
+        let endpoint = `http://localhost:8000/api/drafts/${draftId}`;
+        if (siapCetakIdParam) {
+          endpoint = `http://localhost:8000/api/siap-cetak/${siapCetakIdParam}`;
+        } else if (arsipIdParam) {
+          endpoint = `http://localhost:8000/api/arsip/${arsipIdParam}`;
+        }
+
+        const res = await axios.get(endpoint, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -88,7 +107,7 @@ function DraftTorBarang() {
           setSavedTemplateId(data.template_id);
         }
         
-        let input = data.data_input || data.variables || {};
+        let input = data.variables || data.data_input || {};
         if (typeof input === 'string') {
           try { input = JSON.parse(input); } catch (e) { input = {}; }
         }
@@ -96,22 +115,22 @@ function DraftTorBarang() {
         // Fill Form Utama
         setFormData({
           nama_draft: data.nama_draft || input.nama_draft || '',
-          pengadaan: data.pengadaan || input.pengadaan || '',
-          nama_penyerah: data.nama_penyerah || input.nama_penyerah || '',
+          pengadaan: data.pengadaan || input.pengadaan || input.tujuan_pengadaan || input.TUJUAN_PENGADAAN || '',
+          nama_peninjau: data.nama_peninjau || input.nama_peninjau || data.nama_penyerah || input.nama_penyerah || '',
           bidang1: data.bidang1 || input.bidang1 || '',
-          nama_penerima: data.nama_penerima || input.nama_penerima || '',
+          nama_penyetuju: data.nama_penyetuju || input.nama_penyetuju || data.nama_penerima || input.nama_penerima || '',
           bidang2: data.bidang2 || input.bidang2 || ''
         });
 
         // Fill Spesifikasi Barang
         setItemBarang({
-          nama_barang: data.nama_barang || input.nama_barang || data.item_barang?.nama_barang || '',
-          merk: data.merk || input.merk || data.item_barang?.merk || '',
-          type: data.type || input.type || data.item_barang?.type || '',
-          persyaratan_tambahan: data.persyaratan_tambahan || input.persyaratan_tambahan || data.item_barang?.persyaratan_tambahan || '',
-          jumlah: String(data.jumlah || input.jumlah || data.item_barang?.jumlah || '1'),
-          harga_satuan: String(data.harga_satuan || input.harga_satuan || data.item_barang?.harga_satuan || ''),
-          jumlah_harga: String(data.jumlah_harga || input.jumlah_harga || data.item_barang?.jumlah_harga || '')
+          nama_barang: data.nama_barang || input.nama_barang || input.NAMA_BARANG || data.item_barang?.nama_barang || '',
+          merk: data.merk || input.merk || input.MERK || data.item_barang?.merk || '',
+          type: data.type || input.type || input.TYPE || data.item_barang?.type || '',
+          persyaratan_tambahan: data.persyaratan_tambahan || input.persyaratan_tambahan || input.PERSYARATAN_TAMBAHAN || data.item_barang?.persyaratan_tambahan || '',
+          jumlah: String(data.jumlah || input.jumlah || input.JUMLAH || data.item_barang?.jumlah || '1'),
+          harga_satuan: String(data.harga_satuan || input.harga_satuan || input.HARGA_SATUAN || data.item_barang?.harga_satuan || ''),
+          jumlah_harga: String(data.jumlah_harga || input.jumlah_harga || input.JUMLAH_HARGA || data.item_barang?.jumlah_harga || '')
         });
 
         // Tarik Foto Dari Database
@@ -162,16 +181,14 @@ function DraftTorBarang() {
         }
 
       } catch (err) {
-        console.error("Gagal mengambil detail draft lama:", err);
+        console.error("Gagal mengambil detail dokumen:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchDetailDraft();
-  }, [draftId]);
-
-  const grandTotalRincian = itemsRincian.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
+    fetchDetail();
+  }, [draftId, siapCetakIdParam, arsipIdParam]);
 
   // Helper Auto-complete Karyawan
   const getFilteredPegawai = (query) => {
@@ -187,8 +204,8 @@ function DraftTorBarang() {
     const bidang = karyawan.bidang?.nama_bidang || karyawan.bidang || karyawan.nama_bidang || '';
     setFormData(prev => ({
       ...prev,
-      [target === 'penyerah' ? 'nama_penyerah' : 'nama_penerima']: nama,
-      [target === 'penyerah' ? 'bidang1' : 'bidang2']: bidang,
+      [target === 'peninjau' ? 'nama_peninjau' : 'nama_penyetuju']: nama,
+      [target === 'peninjau' ? 'bidang1' : 'bidang2']: bidang,
     }));
     setActiveDropdown(null);
   };
@@ -197,11 +214,7 @@ function DraftTorBarang() {
   const handleFormChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSpecChange = (field, val) => {
-    const updated = { ...itemBarang, [field]: val };
-    const jml = Number(updated.jumlah) || 0;
-    const hrg = Number(updated.harga_satuan) || 0;
-    updated.jumlah_harga = jml && hrg ? (jml * hrg).toString() : '';
-    setItemBarang(updated);
+    setItemBarang(prev => ({ ...prev, [field]: val }));
   };
 
   const handleRincianChange = (index, field, val) => {
@@ -250,11 +263,16 @@ function DraftTorBarang() {
   const createFormDataPayload = (status = 'draft') => {
     const data = new FormData();
     
-    data.append('template_id', savedTemplateId);
+    data.append('template_id', savedTemplateId || templateId || '');
     data.append('status', status);
 
+    // Kategori eksplisit
+    data.append('kategori', 'tor_barang');
+    data.append('jenis_dokumen', 'tor_barang');
+    data.append('tipe_dokumen', 'tor_barang');
+
     const namaDraftValue = formData.nama_draft.trim() 
-      || (itemBarang.nama_barang ? `TOR - ${itemBarang.nama_barang}` : 'Draft TOR Barang');
+      || (itemBarang.nama_barang ? `TOR Barang - ${itemBarang.nama_barang}` : 'Draft TOR Barang');
     
     data.append('nama_draft', namaDraftValue);
     data.append('nama_dokumen', namaDraftValue);
@@ -265,21 +283,40 @@ function DraftTorBarang() {
     }
 
     const variablesObject = {
+      kategori: 'tor_barang',
+      jenis_dokumen: 'tor_barang',
       nama_draft: namaDraftValue,
       pengadaan: formData.pengadaan,
-      nama_penyerah: formData.nama_penyerah,
+      tujuan_pengadaan: formData.pengadaan,
+      TUJUAN_PENGADAAN: formData.pengadaan,
+
+      nama_peninjau: formData.nama_peninjau,
+      NAMA_PENINJAU: formData.nama_peninjau,
       bidang1: formData.bidang1,
-      nama_penerima: formData.nama_penerima,
+      BIDANG1: formData.bidang1,
+
+      nama_penyetuju: formData.nama_penyetuju,
+      NAMA_PENYETUJU: formData.nama_penyetuju,
       bidang2: formData.bidang2,
+      BIDANG2: formData.bidang2,
+
       nama_barang: itemBarang.nama_barang,
+      NAMA_BARANG: itemBarang.nama_barang,
       merk: itemBarang.merk,
+      MERK: itemBarang.merk,
       type: itemBarang.type,
+      TYPE: itemBarang.type,
       persyaratan_tambahan: itemBarang.persyaratan_tambahan,
+      PERSYARATAN_TAMBAHAN: itemBarang.persyaratan_tambahan,
       jumlah: itemBarang.jumlah,
+      JUMLAH: itemBarang.jumlah,
       qty: itemBarang.jumlah,
       harga_satuan: itemBarang.harga_satuan,
-      jumlah_harga: itemBarang.jumlah_harga,
+      HARGA_SATUAN: itemBarang.harga_satuan,
+      jumlah_harga: grandTotalRincian.toString(),
+      JUMLAH_HARGA: grandTotalRincian.toString(),
       grand_total_rincian: grandTotalRincian.toString(),
+
       rincian_barang: itemsRincian.map(item => ({
         barang: item.barang,
         qty: item.qty,
@@ -331,7 +368,6 @@ function DraftTorBarang() {
     
     const payload = createFormDataPayload('draft');
     const token = localStorage.getItem('token');
-    
     const endpoint = draftId ? `http://localhost:8000/api/drafts/${draftId}` : 'http://localhost:8000/api/drafts';
     
     axios({
@@ -348,7 +384,6 @@ function DraftTorBarang() {
       setLoading(false);
       const savedId = res.data?.data?.id || res.data?.id || draftId;
       
-      // Navigate dengan membawa state tab & highlightId
       navigate('/draft-dokumen', {
         state: { 
           targetTab: 'tor_barang',
@@ -362,7 +397,7 @@ function DraftTorBarang() {
     });
   };
 
-  // SUBMIT FINAL SIAP CETAK (OTOMATIS HIGHLIGHT KE TOR BARANG)
+  // SUBMIT FINAL SIAP CETAK (BARU)
   const handleSubmit = (e) => {
     e.preventDefault();
     setLoading(true);
@@ -392,6 +427,8 @@ function DraftTorBarang() {
       
       navigate('/siap-cetak', {
         state: { 
+          tab: 'tor_barang',
+          activeTab: 'tor_barang',
           targetTab: 'tor_barang',
           highlightId: createdId 
         }
@@ -399,6 +436,82 @@ function DraftTorBarang() {
     })
     .catch(err => {
       console.error("Gagal submit dokumen:", err);
+      setLoading(false);
+    });
+  };
+
+  // UPDATE SIAP CETAK (EDIT DARI SIAP CETAK)
+  const handleUpdateSiapCetak = (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const payload = createFormDataPayload('siap_cetak');
+    payload.append('_method', 'PUT');
+    const token = localStorage.getItem('token');
+
+    axios.post(`http://localhost:8000/api/siap-cetak/${siapCetakIdParam}`, payload, {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      }
+    })
+    .then(() => {
+      setLoading(false);
+      navigate(`/siap-cetak?highlight=${encodeURIComponent(siapCetakIdParam)}&tab=tor_barang`, {
+        state: { 
+          tab: 'tor_barang',
+          activeTab: 'tor_barang',
+          targetTab: 'tor_barang',
+          highlightId: siapCetakIdParam,
+          highlight_id: siapCetakIdParam
+        }
+      });
+    })
+    .catch(err => {
+      console.error("Gagal update antrean cetak:", err);
+      alert(err.response?.data?.message || "Gagal memperbarui dokumen siap cetak.");
+      setLoading(false);
+    });
+  };
+
+  // UPDATE ARSIP (EDIT DARI ARSIP)
+  const handleUpdateArsip = (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const payload = createFormDataPayload('arsip');
+    payload.append('_method', 'PUT');
+    const token = localStorage.getItem('token');
+
+    axios.post(`http://localhost:8000/api/arsip/${arsipIdParam}`, payload, {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      }
+    })
+    .then(() => {
+      setLoading(false);
+      sessionStorage.setItem('active_arsip_highlight', JSON.stringify({
+        highlightId: arsipIdParam,
+        targetTab: 'tor_barang',
+        timestamp: Date.now()
+      }));
+
+      navigate(`/arsip-dokumen?highlight=${encodeURIComponent(arsipIdParam)}&tab=tor_barang`, {
+        state: { 
+          tab: 'tor_barang',
+          activeTab: 'tor_barang',
+          targetTab: 'tor_barang',
+          highlightId: arsipIdParam,
+          highlight_id: arsipIdParam
+        }
+      });
+    })
+    .catch(err => {
+      console.error("Gagal update arsip:", err);
+      alert(err.response?.data?.message || "Gagal memperbarui arsip dokumen.");
       setLoading(false);
     });
   };
@@ -434,13 +547,13 @@ function DraftTorBarang() {
           
           <header className="flex justify-between items-center">
             <h1 className="text-3xl font-black text-slate-800 tracking-tight">
-              {draftId ? 'Edit Draft:' : 'Draft Baru:'}{' '}
+              {arsipIdParam ? 'Edit Arsip:' : siapCetakIdParam ? 'Edit Siap Cetak:' : draftId ? 'Edit Draft:' : 'Draft Baru:'}{' '}
               <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">
                 TOR Barang
               </span>
             </h1>
             <button 
-              onClick={() => navigate('/draft-dokumen')} 
+              onClick={() => navigate(-1)} 
               className="text-xs font-bold text-sky-700 bg-sky-50/80 hover:bg-sky-100 px-4 py-2.5 rounded-2xl border border-sky-100/80 transition-all transform hover:scale-105 active:scale-95 shadow-xs cursor-pointer flex items-center gap-1.5"
             >
               ⬅️ Kembali
@@ -451,7 +564,7 @@ function DraftTorBarang() {
             
             {/* PANEL KIRI FORM */}
             <div className="lg:col-span-7">
-              <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
+              <form onSubmit={arsipIdParam ? handleUpdateArsip : siapCetakIdParam ? handleUpdateSiapCetak : handleSubmit} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                 
                 <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-sky-950 font-medium">
                   <span>🤖</span>
@@ -509,15 +622,33 @@ function DraftTorBarang() {
                       </div>
                       <div>
                         <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Jumlah</label>
-                        <input type="number" min="1" value={itemBarang.jumlah} onChange={e => handleSpecChange('jumlah', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" required />
+                        <input 
+                          type="text" 
+                          value={itemBarang.jumlah} 
+                          onChange={e => handleSpecChange('jumlah', e.target.value)} 
+                          className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" 
+                          required 
+                        />
                       </div>
                       <div>
                         <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Harga Satuan (-PPN 11%)</label>
-                        <input type="number" value={itemBarang.harga_satuan} onChange={e => handleSpecChange('harga_satuan', e.target.value)} className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" required />
+                        <input 
+                          type="number" 
+                          value={itemBarang.harga_satuan} 
+                          onChange={e => handleSpecChange('harga_satuan', e.target.value)} 
+                          className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" 
+                          required 
+                        />
                       </div>
                       <div className="md:col-span-2">
                         <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Jumlah Harga (-PPN 11%)</label>
-                        <input type="number" value={itemBarang.jumlah_harga} readOnly placeholder="Terhitung otomatis" className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs font-bold text-sky-700 bg-sky-50 outline-none cursor-not-allowed" />
+                        <input 
+                          type="text" 
+                          value={itemBarang.jumlah_harga ? `Rp ${Number(itemBarang.jumlah_harga).toLocaleString('id-ID')}` : ''} 
+                          readOnly 
+                          placeholder="Terhitung otomatis dari tabel rincian" 
+                          className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs font-bold text-sky-700 bg-sky-50 outline-none cursor-not-allowed" 
+                        />
                       </div>
                     </div>
                   </div>
@@ -579,27 +710,27 @@ function DraftTorBarang() {
                   </div>
                 </div>
 
-                {/* Penandatangan */}
+                {/* Penandatangan / Peninjau & Penyetuju */}
                 <div className="space-y-3 border-t border-sky-100/80 pt-5">
                   <label className="text-xs font-extrabold text-sky-800 uppercase tracking-wider block">✍️ 4. Penandatangan / Pengesahan</label>
                   <div className="p-4 rounded-2xl bg-[#F4F8FC]/50 border border-sky-100/80 space-y-3">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div className="relative">
-                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Penyerah</label>
-                        <input type="text" name="nama_penyerah" value={formData.nama_penyerah} onChange={handleFormChange} onFocus={() => setActiveDropdown('penyerah')} onBlur={() => setTimeout(() => setActiveDropdown(null), 200)} placeholder="Ketik nama penyerah..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" autoComplete="off" />
-                        {renderKaryawanDropdown('penyerah', formData.nama_penyerah)}
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Peninjau</label>
+                        <input type="text" name="nama_peninjau" value={formData.nama_peninjau} onChange={handleFormChange} onFocus={() => setActiveDropdown('peninjau')} onBlur={() => setTimeout(() => setActiveDropdown(null), 200)} placeholder="Ketik nama peninjau..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" autoComplete="off" />
+                        {renderKaryawanDropdown('peninjau', formData.nama_peninjau)}
                       </div>
                       <div>
-                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Bidang Penyerah</label>
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Bidang Peninjau</label>
                         <input type="text" name="bidang1" value={formData.bidang1} onChange={handleFormChange} placeholder="Terisi otomatis / masukkan bidang..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" />
                       </div>
                       <div className="relative">
-                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Penerima</label>
-                        <input type="text" name="nama_penerima" value={formData.nama_penerima} onChange={handleFormChange} onFocus={() => setActiveDropdown('penerima')} onBlur={() => setTimeout(() => setActiveDropdown(null), 200)} placeholder="Ketik nama penerima..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" autoComplete="off" />
-                        {renderKaryawanDropdown('penerima', formData.nama_penerima)}
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Nama Penyetuju</label>
+                        <input type="text" name="nama_penyetuju" value={formData.nama_penyetuju} onChange={handleFormChange} onFocus={() => setActiveDropdown('penyetuju')} onBlur={() => setTimeout(() => setActiveDropdown(null), 200)} placeholder="Ketik nama penyetuju..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" autoComplete="off" />
+                        {renderKaryawanDropdown('penyetuju', formData.nama_penyetuju)}
                       </div>
                       <div>
-                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Bidang Penerima</label>
+                        <label className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider">Bidang Penyetuju</label>
                         <input type="text" name="bidang2" value={formData.bidang2} onChange={handleFormChange} placeholder="Terisi otomatis / masukkan bidang..." className="w-full border border-sky-100 rounded-xl px-3 py-2 text-xs bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none font-medium transition-all" />
                       </div>
                     </div>
@@ -608,21 +739,41 @@ function DraftTorBarang() {
 
                 {/* ACTION BUTTONS */}
                 <div className="pt-6 border-t border-sky-100/80 flex flex-wrap justify-end gap-3">
-                  <button 
-                    type="button" 
-                    onClick={handleSaveDraft} 
-                    disabled={loading} 
-                    className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
-                  >
-                    {loading ? "Menyimpan..." : "📁 Simpan Draft"}
-                  </button>
-                  <button 
-                    type="submit" 
-                    disabled={loading} 
-                    className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
-                  >
-                    {loading ? "Memproses..." : "Selesai & Kirim Ke Antrean"}
-                  </button>
+                  {arsipIdParam ? (
+                    <button 
+                      type="submit" 
+                      disabled={loading} 
+                      className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-emerald-200/50 hover:shadow-lg hover:shadow-emerald-300/60 disabled:opacity-50 cursor-pointer"
+                    >
+                      {loading ? "Memperbarui..." : "🔄 Update Arsip"}
+                    </button>
+                  ) : siapCetakIdParam ? (
+                    <button 
+                      type="submit" 
+                      disabled={loading} 
+                      className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-emerald-200/50 hover:shadow-lg hover:shadow-emerald-300/60 disabled:opacity-50 cursor-pointer"
+                    >
+                      {loading ? "Memperbarui..." : "🔄 Update Antrean Cetak"}
+                    </button>
+                  ) : (
+                    <>
+                      <button 
+                        type="button" 
+                        onClick={handleSaveDraft} 
+                        disabled={loading} 
+                        className="bg-sky-50/80 hover:bg-gradient-to-r hover:from-sky-500 hover:to-blue-600 text-sky-700 hover:text-white border border-sky-100/80 hover:border-transparent font-bold px-5 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-xs disabled:opacity-50 cursor-pointer"
+                      >
+                        {loading ? "Menyimpan..." : "📁 Simpan Draft"}
+                      </button>
+                      <button 
+                        type="submit" 
+                        disabled={loading} 
+                        className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-sky-200/50 hover:shadow-lg hover:shadow-sky-300/60 disabled:opacity-50 cursor-pointer"
+                      >
+                        {loading ? "Memproses..." : "Selesai & Kirim Ke Antrean"}
+                      </button>
+                    </>
+                  )}
                 </div>
 
               </form>
@@ -730,12 +881,12 @@ function DraftTorBarang() {
                 <div className="border-t pt-4 grid grid-cols-2 gap-4 text-center text-[11px]">
                   <div>
                     <p className="font-medium mb-12">Disiapkan/ditinjau oleh,</p>
-                    <p className="font-bold underline font-mono">{formData.nama_penyerah || '${nama_penyerah}'}</p>
+                    <p className="font-bold underline font-mono">{formData.nama_peninjau || '${nama_peninjau}'}</p>
                     <p className="font-mono text-slate-600">{formData.bidang1 || '${bidang1}'}</p>
                   </div>
                   <div>
                     <p className="font-medium mb-12">Disetujui/disahkan oleh,</p>
-                    <p className="font-bold underline font-mono">{formData.nama_penerima || '${nama_penerima}'}</p>
+                    <p className="font-bold underline font-mono">{formData.nama_penyetuju || '${nama_penyetuju}'}</p>
                     <p className="font-mono text-slate-600">{formData.bidang2 || '${bidang2}'}</p>
                   </div>
                 </div>

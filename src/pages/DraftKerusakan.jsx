@@ -9,8 +9,8 @@ function DraftKerusakan() {
   
   const templateIdParam = searchParams.get('template_id');
   const draftIdParam = searchParams.get('draft_id'); 
-  // Tambahan parameter untuk nangkap ID edit dari siap-cetak
   const siapCetakIdParam = searchParams.get('siap_cetak_id'); 
+  const arsipIdParam = searchParams.get('arsip_id'); // Parameter untuk edit dari Arsip
 
   // State Utama
   const [currentTemplateId, setCurrentTemplateId] = useState(null); 
@@ -290,7 +290,6 @@ function DraftKerusakan() {
       });
   }, [ambilVariabelTemplate]);
 
-  // Tambahan function buat ngambil detail kalau pakai siap_cetak_id
   const ambilDetailSiapCetak = useCallback((siapCetakId) => {
     setLoadingFetch(true);
     const token = localStorage.getItem('token');
@@ -326,7 +325,6 @@ function DraftKerusakan() {
           try { isiVariabel = JSON.parse(isiVariabel); } catch (e) { isiVariabel = {}; }
         }
 
-        // ambilVariabelTemplate Kerusakan sudah meng-handle foto lama & mapping variabel
         ambilVariabelTemplate(data.template_id, isiVariabel);
       })
       .catch(err => {
@@ -335,10 +333,55 @@ function DraftKerusakan() {
       });
   }, [ambilVariabelTemplate]);
 
+  const ambilDetailArsip = useCallback((arsipId) => {
+    setLoadingFetch(true);
+    const token = localStorage.getItem('token');
+
+    let loggedInUserId = null;
+    try {
+      const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      loggedInUserId = savedUser.id || savedUser.user_id || savedUser.id_user || localStorage.getItem('user_id');
+    } catch (e) {
+      loggedInUserId = localStorage.getItem('user_id');
+    }
+
+    axios.get(`http://localhost:8000/api/arsip/${arsipId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      }
+    })
+      .then(res => {
+        const data = res.data.data || res.data;
+        
+        setNamaDraft(data.nama_dokumen || data.nama_draft);
+        setCurrentTemplateId(data.template_id);
+
+        setCreatorId(data.user_id); 
+        setPenanggungId(data.assigned_to_id || null);
+
+        const userIdAktif = res.data.current_user_id || data.current_user_id || loggedInUserId;
+        setCurrentLoginId(userIdAktif);
+
+        let isiVariabel = data.variables || data.data_input || {};
+        if (typeof isiVariabel === 'string') {
+          try { isiVariabel = JSON.parse(isiVariabel); } catch (e) { isiVariabel = {}; }
+        }
+
+        ambilVariabelTemplate(data.template_id, isiVariabel);
+      })
+      .catch(err => {
+        console.error("Gagal memuat detail arsip:", err);
+        setLoadingFetch(false); 
+      });
+  }, [ambilVariabelTemplate]);
+
   useEffect(() => {
     muatDataKaryawan(); 
 
-    if (siapCetakIdParam) {
+    if (arsipIdParam) {
+      ambilDetailArsip(arsipIdParam);
+    } else if (siapCetakIdParam) {
       ambilDetailSiapCetak(siapCetakIdParam);
     } else if (draftIdParam) {
       ambilDetailDraft(draftIdParam);
@@ -354,7 +397,7 @@ function DraftKerusakan() {
         if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
       });
     };
-  }, [templateIdParam, draftIdParam, siapCetakIdParam, muatDataKaryawan, ambilDetailDraft, ambilDetailSiapCetak]);
+  }, [templateIdParam, draftIdParam, siapCetakIdParam, arsipIdParam, muatDataKaryawan, ambilDetailDraft, ambilDetailSiapCetak, ambilDetailArsip]);
 
   const handleCalendarChange = (e) => {
     const value = e.target.value; 
@@ -632,7 +675,6 @@ function DraftKerusakan() {
     
     try {
       const payloadMultipart = generateMultipartData('belum_dicetak', true);
-      // Method spoofing PUT untuk request multipart/form-data 
       payloadMultipart.append('_method', 'PUT'); 
 
       await axios.post(`http://localhost:8000/api/siap-cetak/${siapCetakIdParam}`, payloadMultipart, {
@@ -644,7 +686,6 @@ function DraftKerusakan() {
       });
 
       setLoadingSelesai(false);
-      // Kembali ke halaman siap cetak tab kerusakan setelah berhasil update
       navigate(`/siap-cetak?highlight=${encodeURIComponent(siapCetakIdParam)}&tab=ba_kerusakan`, {
         state: { 
           highlightId: siapCetakIdParam,
@@ -654,6 +695,46 @@ function DraftKerusakan() {
       });
     } catch (err) {
       console.error("Gagal update antrean cetak:", err);
+      setLoadingSelesai(false);
+    }
+  };
+
+  // Fungsi khusus Update Arsip
+  const handleUpdateArsip = async (e) => {
+    e.preventDefault();
+    setLoadingSelesai(true);
+    const token = localStorage.getItem('token');
+    
+    try {
+      const payloadMultipart = generateMultipartData('arsip', true);
+      payloadMultipart.append('_method', 'PUT'); 
+
+      await axios.post(`http://localhost:8000/api/arsip/${arsipIdParam}`, payloadMultipart, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+          'Accept': 'application/json'
+        }
+      });
+
+      setLoadingSelesai(false);
+      sessionStorage.setItem('active_arsip_highlight', JSON.stringify({
+        highlightId: arsipIdParam,
+        targetTab: 'ba_kerusakan',
+        timestamp: Date.now()
+      }));
+
+      navigate(`/arsip-dokumen?highlight=${encodeURIComponent(arsipIdParam)}&tab=ba_kerusakan`, {
+        state: { 
+          tab: 'ba_kerusakan',
+          activeTab: 'ba_kerusakan',
+          targetTab: 'ba_kerusakan',
+          highlightId: arsipIdParam,
+          highlight_id: arsipIdParam
+        }
+      });
+    } catch (err) {
+      console.error("Gagal update arsip:", err);
       setLoadingSelesai(false);
     }
   };
@@ -752,7 +833,7 @@ function DraftKerusakan() {
           <header className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-black text-slate-800 tracking-tight">
-                {draftIdParam ? 'Edit Draft:' : siapCetakIdParam ? 'Edit Siap Cetak:' : 'Draft Baru:'}{' '}
+                {arsipIdParam ? 'Edit Arsip:' : siapCetakIdParam ? 'Edit Siap Cetak:' : draftIdParam ? 'Edit Draft:' : 'Draft Baru:'}{' '}
                 <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">
                   {templateInfo?.nama || 'Memuat...'}
                 </span>
@@ -776,7 +857,7 @@ function DraftKerusakan() {
               
               {/* PANEL KIRI FORM */}
               <div className="lg:col-span-7">
-                <form onSubmit={siapCetakIdParam ? handleUpdateSiapCetak : triggerSelesaiCheck} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
+                <form onSubmit={arsipIdParam ? handleUpdateArsip : siapCetakIdParam ? handleUpdateSiapCetak : triggerSelesaiCheck} className="bg-white rounded-3xl border border-sky-100/80 shadow-md shadow-sky-100/50 p-8 space-y-6">
                   
                   <div className="bg-gradient-to-r from-sky-50/80 to-blue-50/80 border border-sky-100/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-sky-950 font-medium">
                     <span>🤖</span>
@@ -804,7 +885,7 @@ function DraftKerusakan() {
                     </div>
                   </div>
 
-                  {/* VARIABEL DINAMIS TANPA MENGUBAH URUTAN BAWAAN BACKEND */}
+                  {/* VARIABEL DINAMIS */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {(() => {
                       const rawFields = fields.filter(
@@ -985,14 +1066,22 @@ function DraftKerusakan() {
                   {/* TOMBOL AKSI BERDASARKAN HAK AKSES */}
                   <div className="pt-6 border-t border-sky-100 flex flex-col items-end gap-3">
                     
-                    {isRestrictedPenanggung && !siapCetakIdParam && (
+                    {isRestrictedPenanggung && !siapCetakIdParam && !arsipIdParam && (
                       <span className="text-[10px] text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-bold shadow-sm">
                         ⚠️ Akses Penanggung Jawab: Anda hanya memiliki hak untuk mengisi & menyimpan Catatan.
                       </span>
                     )}
 
                     <div className="flex flex-wrap justify-end gap-3">
-                      {siapCetakIdParam ? (
+                      {arsipIdParam ? (
+                        <button 
+                          type="submit" 
+                          disabled={loadingSelesai} 
+                          className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold px-6 py-3 rounded-2xl text-xs transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-emerald-200/50 hover:shadow-lg hover:shadow-emerald-300/60 disabled:opacity-50 cursor-pointer"
+                        >
+                          {loadingSelesai ? 'Memperbarui...' : '🔄 Update Arsip'}
+                        </button>
+                      ) : siapCetakIdParam ? (
                         <button 
                           type="submit" 
                           disabled={loadingSelesai} 
@@ -1069,7 +1158,6 @@ function DraftKerusakan() {
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-all duration-300 animate-fadeIn">
           <div className="bg-white rounded-[32px] p-8 max-w-md w-full shadow-2xl border border-slate-100 space-y-6 transform transition-all duration-300 scale-100">
             
-            {/* Header Modal */}
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-amber-100/80 border border-amber-200/60 flex items-center justify-center text-2xl shrink-0">
                 ⚠️
@@ -1080,7 +1168,6 @@ function DraftKerusakan() {
               </div>
             </div>
 
-            {/* Konten Utama */}
             <div className="bg-[#F0F5FA] rounded-2xl p-5 space-y-4">
               <p className="font-extrabold text-slate-800 text-xs sm:text-sm">Apakah Anda seorang Pembuat File / Pelapor?</p>
               
@@ -1095,7 +1182,6 @@ function DraftKerusakan() {
               </div>
             </div>
 
-            {/* Tombol Aksi Modal */}
             <div className="flex items-center justify-end gap-3 pt-1">
               <button
                 type="button"

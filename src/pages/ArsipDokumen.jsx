@@ -98,6 +98,26 @@ const dapatkanKategoriDokumen = (item) => {
   return 'ba_penyerahan';
 };
 
+const cekApakahHighlighted = (file, target) => {
+  if (!target || !file) return false;
+  if (file === target) return true;
+
+  const fileNama = String(file.nama_dokumen || file.nomor_dokumen || '').toLowerCase().trim();
+  const targetNama = String(target.nama_dokumen || target.nomor_dokumen || target.nomor || '').toLowerCase().trim();
+
+  if (fileNama && targetNama && fileNama === targetNama) return true;
+
+  const listKeyID = ['id', 'dokumen_id', 'id_dokumen', 'arsip_id', 'id_arsip', 'id_history', 'history_id', 'id_cetak'];
+  
+  return listKeyID.some(key => 
+    file[key] !== undefined && 
+    file[key] !== null && 
+    target[key] !== undefined && 
+    target[key] !== null && 
+    String(file[key]).trim() === String(target[key]).trim()
+  );
+};
+
 const formatTanggalIndo = (dateString) => {
   if (!dateString) return null;
   const safeDateString = String(dateString).replace(' ', 'T'); 
@@ -107,26 +127,42 @@ const formatTanggalIndo = (dateString) => {
   return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
 };
 
-const ArsipRowAll = React.memo(({ file, isLoadingPreview, onPreview, onEdit, onBukaModal }) => {
+const ArsipRowAll = React.memo(({ file, isLoadingPreview, onPreview, onEdit, onBukaModal, isHighlighted, highlightedRef }) => {
   const pembuatName = file.user?.name || file.pembuat || 'User';
 
   return (
-    <div className="grid grid-cols-12 items-center px-6 py-3.5 bg-white hover:bg-sky-50/30 border border-sky-100/80 hover:border-sky-300 rounded-2xl transition-all shadow-xs hover:shadow-lg">
+    <div 
+      ref={isHighlighted ? highlightedRef : null}
+      id={`doc-row-${file.id || file.id_dokumen}`}
+      className={`grid grid-cols-12 items-center px-6 py-3.5 rounded-2xl transition-all duration-300 transform cursor-default ${
+        isHighlighted 
+          ? 'bg-emerald-50/95 border-2 border-emerald-500 shadow-xl shadow-emerald-200/60 animate-melayang-pelan scale-[1.01] ring-4 ring-emerald-300/40 relative z-10' 
+          : 'bg-white hover:bg-sky-50/30 border border-sky-100/80 hover:border-sky-300 shadow-xs hover:shadow-lg'
+      }`}
+    >
       <div className="col-span-5 flex items-center gap-3.5">
-        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-100/80 to-blue-50 text-sky-600 flex items-center justify-center text-lg shrink-0 border border-sky-100">
+        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 border transition-colors ${
+          isHighlighted ? 'bg-emerald-500 text-white border-emerald-600 shadow-md' : 'bg-gradient-to-br from-sky-100/80 to-blue-50 text-sky-600 border-sky-100'
+        }`}>
           📄
         </div>
         <div className="min-w-0 pr-2">
-          <p className="font-bold text-slate-800 hover:text-sky-600 text-xs truncate cursor-pointer" onClick={() => onBukaModal(file)}>
-            {file.nama_dokumen}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="font-bold text-slate-800 hover:text-sky-600 text-xs truncate cursor-pointer" onClick={() => onBukaModal(file)}>
+              {file.nama_dokumen}
+            </p>
+            {isHighlighted && (
+              <span className="bg-emerald-600 text-white font-extrabold text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm animate-pulse shrink-0">
+                SOROTAN
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="bg-sky-100 text-sky-800 text-[9px] font-extrabold px-2 py-0.5 rounded-md">
               👤 Pembuat: {pembuatName}
             </span>
           </div>
 
-          {/* TANGGAL CETAK TERAKHIR */}
           {file.tanggal_cetak && (
             <p className="text-[9px] text-emerald-600 font-bold flex items-center gap-1 mt-1">
               🖨️ Tanggal Cetak Terakhir: {formatTanggalIndo(file.tanggal_cetak)}
@@ -160,6 +196,10 @@ const ArsipRowAll = React.memo(({ file, isLoadingPreview, onPreview, onEdit, onB
 });
 
 function ArsipDokumen() {
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
   const [antreanList, setAntreanList] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   
@@ -170,11 +210,11 @@ function ArsipDokumen() {
   
   const [activeTab, setActiveTab] = useState('ba_penyerahan'); 
 
+  const [activeHighlight, setActiveHighlight] = useState(null);
+  const highlightedRef = useRef(null);
+
   const [modalTerbuka, setModalTerbuka] = useState(false);
   const [dokumenTerpilih, setDokumenTerpilih] = useState(null);
-
-  // Router Navigate (opsional untuk redirect halaman edit)
-  const navigate = useNavigate();
 
   // State Notification/Toast
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
@@ -195,9 +235,54 @@ function ArsipDokumen() {
     };
   }, []);
 
-  const userRole = localStorage.getItem('role') || 'admin';
+  // MENANGKAP PARAMETER AWAL DARI URL/SESSION TANPA MENULIS ULANG URL
+  useEffect(() => {
+    let rawHighlight = searchParams.get('highlight') || location.state?.highlightId || location.state?.highlight_id || location.state?.id;
+    let rawNomor = location.state?.nomorDokumen || location.state?.namaDokumen;
+    let targetTabNavigasi = searchParams.get('tab') || location.state?.targetTab || location.state?.activeTab || location.state?.tab;
 
-  // 🌐 MENGAMBIL SELURUH DATA TANPA FILTER USER_ID
+    if (!rawHighlight && !rawNomor && !targetTabNavigasi) {
+      try {
+        const savedHighlightStr = sessionStorage.getItem('active_arsip_highlight');
+        if (savedHighlightStr) {
+          const saved = JSON.parse(savedHighlightStr);
+          if (saved && (Date.now() - (saved.timestamp || 0) < 5000)) {
+            rawHighlight = saved.highlightId;
+            rawNomor = saved.nomorDokumen;
+            targetTabNavigasi = saved.targetTab;
+          } else {
+            sessionStorage.removeItem('active_arsip_highlight');
+          }
+        }
+      } catch (e) {
+        console.error("Gagal membaca sessionStorage:", e);
+      }
+    }
+
+    let cleanId = rawHighlight ? String(typeof rawHighlight === 'object' ? (rawHighlight.id || rawHighlight.id_dokumen) : rawHighlight) : null;
+
+    if (targetTabNavigasi) {
+      setActiveTab(targetTabNavigasi);
+    }
+
+    if (cleanId || rawNomor) {
+      setActiveHighlight({
+        id: cleanId,
+        nomor: rawNomor ? String(rawNomor).trim() : null,
+        tab: targetTabNavigasi || null
+      });
+
+      const timerHighlight = setTimeout(() => {
+        setActiveHighlight(null);
+        sessionStorage.removeItem('active_arsip_highlight');
+      }, 5000);
+
+      return () => clearTimeout(timerHighlight);
+    }
+  }, [location, searchParams]);
+
+  // (SINKRONISASI KE URL SUDAH DIHAPUS TOTAL DI SINI SEPERTI DI ARSIP PRIBADI)
+
   const ambilDataHistoryGlobal = useCallback(() => {
     const token = localStorage.getItem('token');
     axios.get(`http://localhost:8000/api/arsip-dokumen`, {
@@ -217,6 +302,36 @@ function ArsipDokumen() {
     ambilDataHistoryGlobal();
   }, [ambilDataHistoryGlobal]);
 
+  // ITEM TARGET HIGHLIGHT
+  const targetHighlightItem = useMemo(() => {
+    if (!activeHighlight || antreanList.length === 0) return null;
+
+    const targetId = activeHighlight.id;
+    const targetNomor = activeHighlight.nomor ? activeHighlight.nomor.toLowerCase().trim() : '';
+
+    return antreanList.find(f => {
+      if (targetId) {
+        const fileId = String(f.id || f.id_dokumen || f.dokumen_id || '');
+        if (fileId === targetId) return true;
+      }
+      if (targetNomor) {
+        const nomDoc = String(f.nama_dokumen || f.nomor_dokumen || '').toLowerCase().trim();
+        if (nomDoc && nomDoc === targetNomor) return true;
+      }
+      return false;
+    });
+  }, [activeHighlight, antreanList]);
+
+  // Scroll otomatis ke item yang di-highlight begitu data siap
+  useEffect(() => {
+    if (targetHighlightItem && highlightedRef.current) {
+      const timer = setTimeout(() => {
+        highlightedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [targetHighlightItem, activeTab]);
+
   const dataTerfilter = useMemo(() => {
     const lowerSearch = searchTerm.toLowerCase().trim();
 
@@ -229,6 +344,14 @@ function ArsipDokumen() {
   const dataKategori = useMemo(() => {
     return dataTerfilter.filter(item => dapatkanKategoriDokumen(item) === activeTab);
   }, [dataTerfilter, activeTab]);
+
+  // Batasi 7 file teratas jika tidak sedang mencari
+  const dataDitampilkan = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return dataKategori.slice(0, 7);
+    }
+    return dataKategori;
+  }, [dataKategori, searchTerm]);
 
   const handlePreviewDokumen = useCallback((id) => {
     setIsLoadingPreview(id);
@@ -256,13 +379,11 @@ function ArsipDokumen() {
     });
   }, [showToast]);
 
-  // ✏️ FUNGSI NAVIGASI UNTUK KLIK TOMBOL EDIT ARSIP
   const handleEditDokumen = (file) => {
-    // TENTUKAN TARGET ROUTE
     const namaDoc = (file.nama_dokumen || '').toLowerCase();
     const jenisDoc = (file.jenis_dokumen || file.kategori || file.tipe_dokumen || '').toLowerCase();
     
-    let targetRoute = '/draft-penyerahan'; // Default fallback
+    let targetRoute = '/draft-penyerahan';
     
     if (namaDoc.includes('kerusakan') || jenisDoc.includes('kerusakan')) {
         targetRoute = '/draft-kerusakan';
@@ -276,10 +397,7 @@ function ArsipDokumen() {
         targetRoute = '/draft-penyerahan';
     }
 
-    // Ambil ID dengan aman (id atau id_dokumen)
     const targetId = file.id || file.id_dokumen;
-
-    // KITA HANYA MENGIRIM ID MELALUI URL 
     navigate(`${targetRoute}?arsip_id=${targetId}`);
   };
 
@@ -287,6 +405,22 @@ function ArsipDokumen() {
     <div className="bg-[#F4F8FC] text-slate-700 flex h-screen w-full overflow-hidden antialiased" style={{ fontFamily: "'Poppins', sans-serif" }}>
       
       <style>{`
+        @keyframes melayangPelan {
+          0%, 100% { 
+            transform: translateY(0px); 
+            border-color: #10b981; 
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25); 
+          }
+          50% { 
+            transform: translateY(-5px); 
+            border-color: #059669; 
+            box-shadow: 0 10px 22px rgba(5, 150, 105, 0.35); 
+          }
+        }
+        .animate-melayang-pelan {
+          animation: melayangPelan 2.2s ease-in-out infinite !important;
+        }
+
         @keyframes popIn {
           0% { opacity: 0; transform: scale(0.7); }
           70% { transform: scale(1.03); }
@@ -385,7 +519,7 @@ function ArsipDokumen() {
             </div>
           </section>
 
-          {dataKategori.length === 0 ? (
+          {dataDitampilkan.length === 0 ? (
             <div className="bg-white rounded-3xl border border-sky-100 p-20 text-center space-y-3">
               <div className="text-4xl">📭</div>
               <p className="text-slate-500 font-bold text-sm">Tidak ada dokumen tersimpan di arsip global</p>
@@ -399,17 +533,31 @@ function ArsipDokumen() {
               </div>
 
               <div className="space-y-2.5">
-                {dataKategori.map((file, index) => (
-                  <ArsipRowAll 
-                    key={file.id || file.id_dokumen || `baris-all-${index}`}
-                    file={file}
-                    isLoadingPreview={isLoadingPreview}
-                    onPreview={handlePreviewDokumen}
-                    onEdit={handleEditDokumen}
-                    onBukaModal={(doc) => { setDokumenTerpilih(doc); setModalTerbuka(true); }}
-                  />
-                ))}
+                {dataDitampilkan.map((file, index) => {
+                  const isHighlighted = cekApakahHighlighted(file, targetHighlightItem);
+
+                  return (
+                    <ArsipRowAll 
+                      key={file.id || file.id_dokumen || `baris-all-${index}`}
+                      file={file}
+                      isLoadingPreview={isLoadingPreview}
+                      onPreview={handlePreviewDokumen}
+                      onEdit={handleEditDokumen}
+                      onBukaModal={(doc) => { setDokumenTerpilih(doc); setModalTerbuka(true); }}
+                      isHighlighted={isHighlighted}
+                      highlightedRef={isHighlighted ? highlightedRef : null}
+                    />
+                  );
+                })}
               </div>
+
+              {!searchTerm.trim() && dataKategori.length > 7 && (
+                <div className="py-2 text-center">
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    Menampilkan 7 dari {dataKategori.length} dokumen terbaru. Gunakan kolom pencarian di atas untuk menemukan dokumen lainnya secara instan.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
