@@ -141,9 +141,14 @@ function Sidebar() {
               <span>Arsip Dokumen</span>
             </button>
           )}
+        </div>
 
-          {/* Panduan User untuk User Biasa (Hanya muncul jika BUKAN Admin/Master) */}
-          {!isAdminOrMaster && (
+        {/* BANTUAN & INFORMASI (Khusus User Biasa) */}
+        {!isAdminOrMaster && (
+          <div className="pt-3 space-y-1.5 border-t border-sky-100/80">
+            <p className="text-[10px] font-black text-sky-800 uppercase tracking-[0.15em] px-4 mb-2 select-none">
+              Informasi
+            </p>
             <button 
               type="button"
               onClick={() => navigate('/panduan-user')} 
@@ -152,8 +157,8 @@ function Sidebar() {
               <span className="text-base">📖</span>
               <span>Panduan User</span>
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* MONITORING DATA (Khusus Admin / Master) */}
         {isAdminOrMaster && (

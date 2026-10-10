@@ -98,7 +98,6 @@ const formatTanggalIndo = (dateStr) => {
 
 function SiapCetak() {
   const location = useLocation();
-  // PERUBAHAN 1: Tambahkan setSearchParams
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -127,7 +126,6 @@ function SiapCetak() {
     }
   }, []);
 
-  // Inisialisasi tab awal dari state navigasi / query params fleksibel
   const [activeTab, setActiveTab] = useState(() => {
     return searchParams.get('tab') || location.state?.targetTab || location.state?.activeTab || location.state?.tab || 'ba_penyerahan';
   }); 
@@ -151,11 +149,9 @@ function SiapCetak() {
     };
   }, []);
 
-  // 🔒 LOGIKA HAK AKSES DAN KEPEMILIKAN FILE SAKTI
   const isItemMilikUser = useCallback((item) => {
     if (!currentUserId) return true;
 
-    // 👑 Kalo Master Admin / Super Admin, BEBAS LIHAT SEMUA BERKAS!
     const isMaster = 
       currentUserRole.includes('master') || 
       currentUserRole.includes('super') || 
@@ -163,7 +159,6 @@ function SiapCetak() {
 
     if (isMaster) return true;
 
-    // 👤 Kalo Admin Biasa, cek ID Pembuat ATAU ID Mengetahui / Penerima
     const idPembuat = 
       item.user_id || 
       item.created_by || 
@@ -186,7 +181,6 @@ function SiapCetak() {
       dapatkanValueSakti(item, 'mengetahui') ||
       dapatkanValueSakti(item, 'penerima_id');
 
-    // Kalau berkas tanpa ID spesifik, tetap tampilkan
     if (!idPembuat && !idMengetahui) return true;
 
     const isPembuat = String(idPembuat) === String(currentUserId);
@@ -195,7 +189,6 @@ function SiapCetak() {
     return isPembuat || isMengetahui;
   }, [currentUserId, currentUserRole]);
 
-  // DETEKSI PENANDA / HIGHLIGHT SECARA MAKSIMAL & FLEKSIBEL
   useEffect(() => {
     const targetTabInput = searchParams.get('tab') || location.state?.targetTab || location.state?.activeTab || location.state?.tab;
     if (targetTabInput) {
@@ -230,7 +223,6 @@ function SiapCetak() {
     }
   }, [location.state, searchParams]);
 
-  // PERUBAHAN 2: SINKRONISASI STATE TAB KE URL
   useEffect(() => {
     const tabDiUrl = searchParams.get('tab');
     if (tabDiUrl !== activeTab) {
@@ -297,14 +289,10 @@ function SiapCetak() {
     }
   }, [targetHighlightItem, loading, activeTab]);
 
-  // ✏️ FUNGSI NAVIGASI UNTUK KLIK TOMBOL EDIT SIAP CETAK (DIPERBARUI)
-  // SEKARANG SAMA RINGANNYA SEPERTI DRAFT
   const handleEditAction = (file) => {
-    // Gunakan helper pintar yang sudah ada di kodemu untuk mendeteksi jenis dokumen secara akurat
     const kategori = dapatkanKategoriDokumen(file);
-    let targetRoute = '/draft-penyerahan'; // Default fallback
+    let targetRoute = '/draft-penyerahan';
     
-    // Tentukan route berdasarkan kategori hasil deteksi
     if (kategori === 'ba_kerusakan') {
         targetRoute = '/draft-kerusakan';
     } else if (kategori === 'surat_tugas') {
@@ -317,7 +305,6 @@ function SiapCetak() {
         targetRoute = '/draft-penyerahan';
     }
 
-    // Eksekusi navigasi
     navigate(`${targetRoute}?siap_cetak_id=${file.id}`);
   };
 
@@ -378,7 +365,6 @@ function SiapCetak() {
     const counts = { ba_penyerahan: 0, ba_kerusakan: 0, surat_tugas: 0, tor_barang: 0, tor_jasa: 0 };
     antreanList.forEach(item => {
       if (item.foto_ttd) return;
-
       if (!isItemMilikUser(item)) return;
 
       const kat = dapatkanKategoriDokumen(item);
@@ -393,7 +379,6 @@ function SiapCetak() {
     const lowerSearch = searchTerm.toLowerCase();
     return antreanList.filter(item => {
       if (item.foto_ttd) return false;
-
       if (!isItemMilikUser(item)) return false;
 
       const namaDokumen = (item.nama_dokumen || '').toLowerCase();
@@ -488,7 +473,7 @@ function SiapCetak() {
           </section>
 
           {loading ? (
-            <div className="bg-[#white] rounded-3xl border border-sky-100/80 p-16 text-center space-y-4 shadow-xs animate-pulse">
+            <div className="bg-white rounded-3xl border border-sky-100/80 p-16 text-center space-y-4 shadow-xs animate-pulse">
               <div className="text-4xl text-sky-500 animate-spin inline-block">⏳</div>
               <p className="text-sky-600 font-bold text-xs">Sedang memilah berkas dari database...</p>
             </div>
@@ -588,14 +573,14 @@ function SiapCetak() {
                       </div>
 
                       <div className="flex items-center justify-center gap-2.5">
-                        {/* ✏️ TOMBOL EDIT BARU */}
+                        {/* ✏️ TOMBOL EDIT BERTEMA GRADASI SKY-BLUE */}
                         <button
                           type="button"
                           onClick={() => handleEditAction(file)}
                           title="Edit/Revisi data berkas ini"
-                          className="px-3.5 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer bg-amber-500 hover:bg-amber-600 text-white"
+                          className="px-3.5 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-200/60"
                         >
-                          ✏ EDIT
+                          ✏️ EDIT
                         </button>
 
                         <span className="text-sky-200 text-sm font-light select-none">|</span>

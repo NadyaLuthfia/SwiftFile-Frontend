@@ -110,7 +110,7 @@ function MonitoringData() {
         setModalPreviewTerbuka(true);
         fetchAllFilesForMonitoring();
       } else {
-        triggerErrorModal('URL Tidak Ditemukan', 'Dokumen berhasil dipproses, namun URL PDF tidak ditemukan.');
+        triggerErrorModal('URL Tidak Ditemukan', 'Dokumen berhasil diproses, namun URL PDF tidak ditemukan.');
       }
     } catch (error) {
       console.error("Gagal memuat preview PDF:", error);
@@ -238,7 +238,6 @@ function MonitoringData() {
     };
   }, [activeHighlight]);
 
-  // HELPER MENCARI VALUE BERDASARKAN KEYWORD DI OBJECT
   const findValueByKeywords = (obj, exactKeywords, partialKeywords = []) => {
     if (!obj || typeof obj !== 'object') return null;
 
@@ -288,12 +287,10 @@ function MonitoringData() {
     return null;
   };
 
-  // 🌟 DETEKSI OTOMATIS: CEK APAKAH ADA MINIMAL 1 BERKAS YANG NONAKTIF
   const hasNonaktifFiles = useMemo(() => {
     return fileList.some(file => String(file.status_aktif) === '0' || file.status_aktif === 0 || file.status_aktif === false);
   }, [fileList]);
 
-  // 🎯 LOGIKA PENCARIAN PRESISI DENGAN FILTER KATA & SUB-TAB STATUS (AKTIF / NONAKTIF / SEMUA)
   const filteredFiles = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -301,7 +298,6 @@ function MonitoringData() {
       const matchRole = selectedRole === '' || file.user?.role === selectedRole;
       if (!matchRole) return false;
 
-      // Filter berdasarkan status aktif/nonaktif hanya jika ada berkas nonaktif
       const isActive = file.status_aktif == 1 || file.status_aktif === '1' || file.status_aktif === null || file.status_aktif === undefined;
       if (hasNonaktifFiles) {
         if (filterStatus === 'aktif' && !isActive) return false;
@@ -488,7 +484,6 @@ function MonitoringData() {
           animation: drawCheck 0.4s ease-in-out 0.1s forwards;
         }
 
-        /* 🌊 EFEK FLOATING NAIK TURUN SLOW UNTUK HIGHLIGHT */
         @keyframes floatSlow {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-6px); }
@@ -503,16 +498,14 @@ function MonitoringData() {
       <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto h-full">
         <div className="w-full max-w-6xl mx-auto space-y-6">
           
-          {/* HEADER SECTION */}
           <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-black text-slate-800 tracking-tight">
                 Monitoring <span className="bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent font-extrabold">File Terbaru </span>
               </h1>
-              <p className="text-xs text-slate-400 mt-1 font-medium">Menampilkan riwayat pemantauan dan pengelolaan dokumen arsip terbaru.</p>
+              <p className="text-xs text-slate-400 mt-1 font-medium"></p>
             </div>
 
-            {/* BAR PENCARIAN & FILTER ROLE */}
             <div className="flex items-center gap-2 max-w-md w-full md:justify-end">
               <div className="relative w-full max-w-xs">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-sky-400 text-xs">🔍</span>
@@ -538,7 +531,6 @@ function MonitoringData() {
             </div>
           </section>
 
-          {/* 🌟 SUB-TAB FILTER STATUS (HANYA MUNCUL JIKA ADA MINIMAL 1 BERKAS NONAKTIF) */}
           {hasNonaktifFiles && (
             <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-2xl w-fit text-xs font-bold border border-slate-200/80">
               <button
@@ -577,7 +569,6 @@ function MonitoringData() {
             </div>
           )}
 
-          {/* MAIN CONTAINER FRAME */}
           {loading ? (
             <div className="mt-4 bg-white rounded-[28px] border border-sky-100 p-16 text-center space-y-3 shadow-xl shadow-sky-100/50">
               <div className="text-3xl text-sky-500 animate-spin inline-block">⏳</div>
@@ -691,7 +682,6 @@ function MonitoringData() {
                           {isLoadingPreview === file.id ? '⏳ MEMUAT...' : '👁️ PREVIEW'}
                         </button>
 
-                        {/* HANYA MASTER ADMIN YANG MEMILIKI TOMBOL NONAKTIFKAN / AKTIFKAN */}
                         {userRole === 'master_admin' && (
                           <button 
                             type="button"
@@ -719,26 +709,28 @@ function MonitoringData() {
         </div>
       </main>
 
-      {/* MODAL PREVIEW PDF DOKUMEN */}
+      {/* MODAL PREVIEW PDF DOKUMEN - TOMBOL SUDAH DIPERCANTIK */}
       {modalPreviewTerbuka && previewPdfUrl && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all">
           <div className="bg-white rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl border border-sky-100 overflow-hidden animate-pop">
             
             <div className="flex justify-between items-center px-6 py-4 border-b border-sky-100 bg-[#F4F8FC]">
               <div className="flex items-center gap-3">
-                <span className="bg-sky-100 text-sky-600 p-2 rounded-xl text-lg">📄</span>
+                <span className="bg-sky-100 text-sky-600 p-2.5 rounded-2xl text-lg shadow-xs">📄</span>
                 <div>
                   <h3 className="text-sm font-black text-slate-800">Preview Dokumen</h3>
                   <p className="text-[10px] text-slate-500 font-medium">Pratinjau langsung tanpa berpindah halaman</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              
+              {/* TOMBOL AKSI MODAL PREVIEW YANG SUDAH DIPERBAGUS */}
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => window.open(previewPdfUrl, '_blank')}
-                  className="text-[11px] font-bold text-sky-600 bg-sky-50 hover:bg-sky-100 px-4 py-2 rounded-xl transition-colors border border-sky-100 cursor-pointer"
+                  className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
-                  ↗ Cetak Dokumen
+                  <span>🖨️</span> Cetak Dokumen
                 </button>
                 <button 
                   type="button"
@@ -746,9 +738,9 @@ function MonitoringData() {
                     setModalPreviewTerbuka(false);
                     setPreviewPdfUrl(null);
                   }}
-                  className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-4 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer select-none"
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/60 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center gap-1.5 active:scale-95 shadow-xs"
                 >
-                  ✕ Tutup
+                  <span>✕</span> Tutup
                 </button>
               </div>
             </div>
@@ -765,7 +757,6 @@ function MonitoringData() {
         </div>
       )}
 
-      {/* MODAL DETAIL DOKUMEN */}
       {selectedFileForModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs transition-all">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-sky-100 space-y-4 animate-pop">
@@ -853,7 +844,6 @@ function MonitoringData() {
         </div>
       )}
 
-      {/* POP-UP MODAL NOTIFIKASI SUKSES */}
       {isSuccessModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 transition-all">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-sky-100 w-[340px] p-6 text-center space-y-4 animate-pop relative">
@@ -876,7 +866,6 @@ function MonitoringData() {
         </div>
       )}
 
-      {/* POP-UP MODAL PERINGATAN / ERROR */}
       {isErrorModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 transition-all">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-sky-100 w-[340px] p-6 text-center space-y-4 animate-pop relative">

@@ -134,10 +134,10 @@ const ArsipRowAll = React.memo(({ file, isLoadingPreview, onPreview, onEdit, onB
     <div 
       ref={isHighlighted ? highlightedRef : null}
       id={`doc-row-${file.id || file.id_dokumen}`}
-      className={`grid grid-cols-12 items-center px-6 py-3.5 rounded-2xl transition-all duration-300 transform cursor-default ${
+      className={`grid grid-cols-12 items-center px-6 py-3.5 rounded-2xl transition-all duration-300 cursor-pointer ${
         isHighlighted 
           ? 'bg-emerald-50/95 border-2 border-emerald-500 shadow-xl shadow-emerald-200/60 animate-melayang-pelan scale-[1.01] ring-4 ring-emerald-300/40 relative z-10' 
-          : 'bg-white hover:bg-sky-50/30 border border-sky-100/80 hover:border-sky-300 shadow-xs hover:shadow-lg'
+          : 'bg-white hover:bg-sky-50/30 border border-sky-100/80 hover:border-sky-300 hover:scale-[1.015] shadow-xs hover:shadow-lg'
       }`}
     >
       <div className="col-span-5 flex items-center gap-3.5">
@@ -148,7 +148,7 @@ const ArsipRowAll = React.memo(({ file, isLoadingPreview, onPreview, onEdit, onB
         </div>
         <div className="min-w-0 pr-2">
           <div className="flex items-center gap-2">
-            <p className="font-bold text-slate-800 hover:text-sky-600 text-xs truncate cursor-pointer" onClick={() => onBukaModal(file)}>
+            <p className="font-bold text-slate-800 hover:text-sky-600 text-xs truncate" onClick={() => onBukaModal(file)}>
               {file.nama_dokumen}
             </p>
             {isHighlighted && (
@@ -186,9 +186,9 @@ const ArsipRowAll = React.memo(({ file, isLoadingPreview, onPreview, onEdit, onB
         <button
           type="button"
           onClick={() => onEdit(file)}
-          className="px-3.5 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer bg-amber-500 hover:bg-amber-600 text-white"
+          className="px-3.5 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-200/60"
         >
-          ✏ EDIT
+          ✏️ EDIT
         </button>
       </div>
     </div>
@@ -203,7 +203,6 @@ function ArsipDokumen() {
   const [antreanList, setAntreanList] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   
-  // State Preview
   const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
   const [modalPreviewTerbuka, setModalPreviewTerbuka] = useState(false);
   const [isLoadingPreview, setIsLoadingPreview] = useState(null);
@@ -216,7 +215,6 @@ function ArsipDokumen() {
   const [modalTerbuka, setModalTerbuka] = useState(false);
   const [dokumenTerpilih, setDokumenTerpilih] = useState(null);
 
-  // State Notification/Toast
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
   const toastTimerRef = useRef(null);
 
@@ -235,7 +233,6 @@ function ArsipDokumen() {
     };
   }, []);
 
-  // MENANGKAP PARAMETER AWAL DARI URL/SESSION TANPA MENULIS ULANG URL
   useEffect(() => {
     let rawHighlight = searchParams.get('highlight') || location.state?.highlightId || location.state?.highlight_id || location.state?.id;
     let rawNomor = location.state?.nomorDokumen || location.state?.namaDokumen;
@@ -281,8 +278,6 @@ function ArsipDokumen() {
     }
   }, [location, searchParams]);
 
-  // (SINKRONISASI KE URL SUDAH DIHAPUS TOTAL DI SINI SEPERTI DI ARSIP PRIBADI)
-
   const ambilDataHistoryGlobal = useCallback(() => {
     const token = localStorage.getItem('token');
     axios.get(`http://localhost:8000/api/arsip-dokumen`, {
@@ -302,7 +297,6 @@ function ArsipDokumen() {
     ambilDataHistoryGlobal();
   }, [ambilDataHistoryGlobal]);
 
-  // ITEM TARGET HIGHLIGHT
   const targetHighlightItem = useMemo(() => {
     if (!activeHighlight || antreanList.length === 0) return null;
 
@@ -322,7 +316,6 @@ function ArsipDokumen() {
     });
   }, [activeHighlight, antreanList]);
 
-  // Scroll otomatis ke item yang di-highlight begitu data siap
   useEffect(() => {
     if (targetHighlightItem && highlightedRef.current) {
       const timer = setTimeout(() => {
@@ -345,7 +338,6 @@ function ArsipDokumen() {
     return dataTerfilter.filter(item => dapatkanKategoriDokumen(item) === activeTab);
   }, [dataTerfilter, activeTab]);
 
-  // Batasi 7 file teratas jika tidak sedang mencari
   const dataDitampilkan = useMemo(() => {
     if (!searchTerm.trim()) {
       return dataKategori.slice(0, 7);
@@ -441,7 +433,6 @@ function ArsipDokumen() {
         }
       `}</style>
 
-      {/* Toast Notification */}
       {notification.show && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-[9999] flex items-center justify-center p-4 transition-all">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-sky-100 w-[340px] p-6 text-center space-y-4 animate-pop relative">
@@ -495,7 +486,6 @@ function ArsipDokumen() {
             </div>
           </section>
 
-          {/* TAB KATEGORI */}
           <section className="bg-white p-2.5 rounded-3xl border border-sky-100/80 shadow-sm space-y-3">
             <div className="grid grid-cols-5 gap-2 bg-[#F4F8FC] p-1.5 rounded-2xl border border-sky-100/60 w-full">
               {[
@@ -563,26 +553,26 @@ function ArsipDokumen() {
         </div>
       </main>
 
-      {/* MODAL PREVIEW DOKUMEN */}
       {modalPreviewTerbuka && previewPdfUrl && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all">
           <div className="bg-white rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl border border-sky-100 overflow-hidden animate-pop">
             
             <div className="flex justify-between items-center px-6 py-4 border-b border-sky-100 bg-[#F4F8FC]">
               <div className="flex items-center gap-3">
-                <span className="bg-sky-100 text-sky-600 p-2 rounded-xl text-lg">📄</span>
+                <span className="bg-sky-100 text-sky-600 p-2.5 rounded-2xl text-lg shadow-xs">📄</span>
                 <div>
                   <h3 className="text-sm font-black text-slate-800">Preview Dokumen</h3>
                   <p className="text-[10px] text-slate-500 font-medium">Pratinjau langsung tanpa berpindah halaman</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => window.open(previewPdfUrl, '_blank')}
-                  className="text-[11px] font-bold text-sky-600 bg-sky-50 hover:bg-sky-100 px-4 py-2 rounded-xl transition-colors border border-sky-100"
+                  className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
-                  ↗ Cetak Dokumen
+                  <span>🖨️</span> Cetak Dokumen
                 </button>
                 <button 
                   type="button"
@@ -590,9 +580,9 @@ function ArsipDokumen() {
                     setModalPreviewTerbuka(false);
                     setPreviewPdfUrl(null);
                   }}
-                  className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-4 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer select-none"
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/60 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center gap-1.5 active:scale-95 shadow-xs"
                 >
-                  ✕ Tutup
+                  <span>✕</span> Tutup
                 </button>
               </div>
             </div>

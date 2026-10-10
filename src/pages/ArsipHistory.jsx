@@ -216,7 +216,6 @@ const ArsipRow = React.memo(({ file, isLoadingPreview, onPreview, onBukaModal, a
             </p>
           )}
           
-          {/* TANGGAL CETAK TERAKHIR */}
           {file.tanggal_cetak && (
             <p className="text-[9px] text-emerald-600 font-bold flex items-center gap-1 mt-1">
               🖨️ Tanggal Cetak Terakhir: {formatTanggalIndo(file.tanggal_cetak)}
@@ -250,14 +249,11 @@ function ArsipHistory() {
   const [searchTerm, setSearchTerm] = useState("");
   const [downloadingId, setDownloadingId] = useState(null); 
 
-  // State untuk fitur Preview
   const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
   const [modalPreviewTerbuka, setModalPreviewTerbuka] = useState(false);
   const [isLoadingPreview, setIsLoadingPreview] = useState(null);
   
   const [activeTab, setActiveTab] = useState('ba_penyerahan'); 
-
-  // STATE SUB-TAB FILTER STATUS (Aktif / Nonaktif / Semua)
   const [filterStatus, setFilterStatus] = useState('aktif');
 
   const [activeHighlight, setActiveHighlight] = useState(null);
@@ -288,7 +284,6 @@ function ArsipHistory() {
     };
   }, []);
 
-  // INFORMASI AKUN USER & ROLE
   const userRole = useMemo(() => {
     try {
       return localStorage.getItem('role') || JSON.parse(localStorage.getItem('user'))?.role || 'user';
@@ -306,10 +301,6 @@ function ArsipHistory() {
     }
   }, []);
 
-  // 🔒 ATURAN KETAT ARSIP:
-  // Siapa pun yang login (Pelapor, Penanggung Jawab, Mengetahui, mau pun Master Admin), 
-  // di halaman Arsip HANYA BISA melihat dokumen yang dibuat oleh dirinya sendiri (user_id === currentUserId).
-  // Master Admin memantau seluruh berkas secara terpisah di halaman Monitoring Data.
   const listSesuaiRole = useMemo(() => {
     const safeList = Array.isArray(antreanList) ? antreanList : [];
     if (!currentUserId) return safeList;
@@ -352,7 +343,6 @@ function ArsipHistory() {
     ambilDataHistory();
   }, [ambilDataHistory]);
 
-  // SESSION STORAGE HIGHLIGHT
   useEffect(() => {
     let rawHighlight = searchParams.get('highlight') || location.state?.highlightId || location.state?.highlight_id || location.state?.id;
     let rawNomor = location.state?.nomorDokumen || location.state?.namaDokumen;
@@ -410,7 +400,6 @@ function ArsipHistory() {
     }
   }, [location, searchParams]);
 
-  // ALGORITMA HIGHLIGHT PRESISI
   const targetHighlightItem = useMemo(() => {
     if (!activeHighlight || listSesuaiRole.length === 0) return null;
 
@@ -466,7 +455,6 @@ function ArsipHistory() {
     return hasil;
   }, [activeHighlight, listSesuaiRole, activeTab]);
 
-  // PENCARIAN
   const dataTerfilter = useMemo(() => {
     const lowerSearch = searchTerm.toLowerCase().trim();
 
@@ -525,8 +513,6 @@ function ArsipHistory() {
     setIsLoadingPreview(id);
     const token = localStorage.getItem('token');
 
-    // MURNI PREVIEW: Menggunakan GET ke endpoint view/preview tanpa memicu konversi LibreOffice.
-    // Sesuaikan URL '/preview' ini dengan endpoint di backend yang bertugas me-return PDF yang sudah ada.
     axios.get(`http://localhost:8000/api/arsip-history/${id}/preview`, {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -839,28 +825,27 @@ function ArsipHistory() {
         </div>
       )}
 
-      {/* MODAL PREVIEW DOKUMEN */}
+      {/* MODAL PREVIEW DOKUMEN - TOMBOL SUDAH DIPERCANTIK */}
       {modalPreviewTerbuka && previewPdfUrl && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all">
           <div className="bg-white rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl border border-sky-100 overflow-hidden animate-pop">
             
-            {/* Header Modal Preview */}
             <div className="flex justify-between items-center px-6 py-4 border-b border-sky-100 bg-[#F4F8FC]">
               <div className="flex items-center gap-3">
-                <span className="bg-sky-100 text-sky-600 p-2 rounded-xl text-lg">📄</span>
+                <span className="bg-sky-100 text-sky-600 p-2.5 rounded-2xl text-lg shadow-xs">📄</span>
                 <div>
                   <h3 className="text-sm font-black text-slate-800">Preview Dokumen</h3>
                   <p className="text-[10px] text-slate-500 font-medium">Pratinjau langsung tanpa berpindah halaman</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                {/* Tombol Buka Tab Baru (opsional jika user butuh layar penuh) */}
+
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => window.open(previewPdfUrl, '_blank')}
-                  className="text-[11px] font-bold text-sky-600 bg-sky-50 hover:bg-sky-100 px-4 py-2 rounded-xl transition-colors border border-sky-100"
+                  className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
-                  ↗ Cetak Dokumen
+                  <span>🖨️</span> Cetak Dokumen
                 </button>
                 <button 
                   type="button"
@@ -868,14 +853,13 @@ function ArsipHistory() {
                     setModalPreviewTerbuka(false);
                     setPreviewPdfUrl(null);
                   }}
-                  className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-4 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer select-none"
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/60 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center gap-1.5 active:scale-95 shadow-xs"
                 >
-                  ✕ Tutup
+                  <span>✕</span> Tutup
                 </button>
               </div>
             </div>
 
-            {/* Area iFrame Dokumen */}
             <div className="flex-1 bg-slate-200/50 p-2">
               <iframe 
                 src={`${previewPdfUrl}#toolbar=0`} 
