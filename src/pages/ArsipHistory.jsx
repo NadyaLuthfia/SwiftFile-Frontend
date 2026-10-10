@@ -257,6 +257,9 @@ function ArsipHistory() {
   
   const [activeTab, setActiveTab] = useState('ba_penyerahan'); 
 
+  // STATE SUB-TAB FILTER STATUS (Aktif / Nonaktif / Semua)
+  const [filterStatus, setFilterStatus] = useState('aktif');
+
   const [activeHighlight, setActiveHighlight] = useState(null);
   const highlightedRef = useRef(null);
 

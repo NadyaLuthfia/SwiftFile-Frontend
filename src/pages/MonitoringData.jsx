@@ -110,7 +110,7 @@ function MonitoringData() {
         setModalPreviewTerbuka(true);
         fetchAllFilesForMonitoring();
       } else {
-        triggerErrorModal('URL Tidak Ditemukan', 'Dokumen berhasil diproses, namun URL PDF tidak ditemukan.');
+        triggerErrorModal('URL Tidak Ditemukan', 'Dokumen berhasil dipproses, namun URL PDF tidak ditemukan.');
       }
     } catch (error) {
       console.error("Gagal memuat preview PDF:", error);
